@@ -23,6 +23,6 @@ async def get_current_user(
     except (TypeError, ValueError) as e:
         raise HTTPException(status_code=401, detail="Invalid token subject") from e
     user = await db.get(User, user_id)
-    if user is None or not user.is_active:
+    if user is None or user.status != "active":
         raise HTTPException(status_code=401, detail="User not found or inactive")
     return user

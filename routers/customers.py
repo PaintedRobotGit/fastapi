@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -10,10 +12,29 @@ from access import (
     get_access_context,
 )
 from database import get_db
-from models import Customer, Partner
+from models import Customer, Industry, Partner
 from schemas import CustomerCreate, CustomerRead, CustomerUpdate
 
 router = APIRouter(prefix="/customers", tags=["customers"])
+
+
+def _slug_base(name: str) -> str:
+    s = name.lower().strip()
+    s = re.sub(r"[^a-z0-9]+", "-", s)
+    return s.strip("-") or "customer"
+
+
+async def _allocate_unique_slug(db: AsyncSession, partner_id: int, base: str) -> str:
+    candidate = base
+    n = 2
+    while True:
+        r = await db.execute(
+            select(Customer.id).where(Customer.partner_id == partner_id, Customer.slug == candidate)
+        )
+        if r.scalar_one_or_none() is None:
+            return candidate
+        candidate = f"{base}-{n}"
+        n += 1
 
 
 @router.get("/", response_model=list[CustomerRead])
@@ -71,7 +92,13 @@ async def create_customer(
         ep = await effective_partner_id(db, ctx.user)
         if ep is None or payload.partner_id != ep:
             raise HTTPException(status_code=403, detail="Cannot create customers for another partner.")
-    customer = Customer(**payload.model_dump())
+    if payload.industry_id is not None and await db.get(Industry, payload.industry_id) is None:
+        raise HTTPException(status_code=400, detail="Invalid industry_id.")
+    base_slug = _slug_base(payload.slug) if payload.slug else _slug_base(payload.name)
+    slug = await _allocate_unique_slug(db, payload.partner_id, base_slug)
+    data = payload.model_dump()
+    data.pop("slug", None)
+    customer = Customer(**data, slug=slug)
     db.add(customer)
     try:
         await db.flush()
@@ -95,12 +122,17 @@ async def update_customer(
     if ctx.tier == "customer":
         raise HTTPException(status_code=403, detail="Cannot update customer with this account type.")
     updates = payload.model_dump(exclude_unset=True)
+    if "industry_id" in updates and updates["industry_id"] is not None:
+        if await db.get(Industry, updates["industry_id"]) is None:
+            raise HTTPException(status_code=400, detail="Invalid industry_id.")
     if "partner_id" in updates:
         if ctx.tier == "partner":
             raise HTTPException(status_code=403, detail="Cannot reassign customer to another partner.")
         parent = await db.get(Partner, updates["partner_id"])
         if parent is None:
             raise HTTPException(status_code=400, detail="Partner does not exist for partner_id.")
+    if "slug" in updates and updates["slug"] is not None:
+        updates["slug"] = _slug_base(updates["slug"])
     for field, value in updates.items():
         setattr(customer, field, value)
     try:

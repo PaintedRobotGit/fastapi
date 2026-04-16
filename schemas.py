@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -23,6 +23,20 @@ class PlanRead(BaseModel):
     updated_at: datetime
 
 
+# --- Industries ---
+
+
+class IndustryRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    slug: str
+    sort_order: int
+    is_active: bool
+    created_at: datetime
+
+
 # --- Partners ---
 
 
@@ -32,9 +46,12 @@ class PartnerCreate(BaseModel):
     slug: str | None = Field(default=None, max_length=100)
     plan_id: int
     timezone: str = Field(default="UTC", max_length=100)
-    is_active: bool = True
+    status: str = Field(default="active", max_length=50)
     trial_ends_at: datetime | None = None
     subscription_expires_at: datetime | None = None
+    country: str | None = None
+    website: str | None = None
+    archived_at: datetime | None = None
 
 
 class PartnerUpdate(BaseModel):
@@ -43,9 +60,12 @@ class PartnerUpdate(BaseModel):
     slug: str | None = Field(default=None, max_length=100)
     plan_id: int | None = None
     timezone: str | None = Field(default=None, max_length=100)
-    is_active: bool | None = None
+    status: str | None = Field(default=None, max_length=50)
     trial_ends_at: datetime | None = None
     subscription_expires_at: datetime | None = None
+    country: str | None = None
+    website: str | None = None
+    archived_at: datetime | None = None
 
 
 class PartnerRead(BaseModel):
@@ -57,9 +77,12 @@ class PartnerRead(BaseModel):
     slug: str | None
     plan_id: int
     timezone: str
-    is_active: bool
+    status: str
     trial_ends_at: datetime | None
     subscription_expires_at: datetime | None
+    country: str | None
+    website: str | None
+    archived_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -70,19 +93,34 @@ class PartnerRead(BaseModel):
 class CustomerCreate(BaseModel):
     partner_id: int
     name: str = Field(max_length=255)
+    slug: str | None = Field(
+        default=None,
+        description="URL-friendly id unique per partner; auto-generated from name when omitted.",
+    )
     email: str | None = Field(default=None, max_length=255)
-    industry: str | None = Field(default=None, max_length=100)
+    industry_id: int | None = None
     timezone: str = Field(default="UTC", max_length=100)
-    is_active: bool = True
+    website_url: str | None = None
+    currency: str = Field(default="USD", max_length=16)
+    customer_type: str | None = Field(default=None, max_length=32)
+    status: str = Field(default="active", max_length=32)
+    notes: str | None = None
+    archived_at: datetime | None = None
 
 
 class CustomerUpdate(BaseModel):
     partner_id: int | None = None
     name: str | None = Field(default=None, max_length=255)
+    slug: str | None = None
     email: str | None = Field(default=None, max_length=255)
-    industry: str | None = Field(default=None, max_length=100)
+    industry_id: int | None = None
     timezone: str | None = Field(default=None, max_length=100)
-    is_active: bool | None = None
+    website_url: str | None = None
+    currency: str | None = Field(default=None, max_length=16)
+    customer_type: str | None = Field(default=None, max_length=32)
+    status: str | None = Field(default=None, max_length=32)
+    notes: str | None = None
+    archived_at: datetime | None = None
 
 
 class CustomerRead(BaseModel):
@@ -91,10 +129,16 @@ class CustomerRead(BaseModel):
     id: int
     partner_id: int
     name: str
+    slug: str
     email: str | None
-    industry: str | None
+    industry_id: int | None
     timezone: str
-    is_active: bool
+    website_url: str | None
+    currency: str
+    customer_type: str | None
+    status: str
+    notes: str | None
+    archived_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -104,7 +148,7 @@ class PartnerWithCustomersRead(BaseModel):
     customers: list[CustomerRead]
 
 
-# --- Roles & permissions (read models aligned with docs/database.md) ---
+# --- Roles & permissions ---
 
 
 class RoleRead(BaseModel):
@@ -138,8 +182,10 @@ class UserCreate(BaseModel):
     last_name: str | None = Field(default=None, max_length=100)
     avatar_url: str | None = Field(default=None, max_length=512)
     role_id: int
-    is_active: bool = True
-    is_verified: bool = False
+    status: str = Field(default="active", max_length=32)
+    email_verified_at: datetime | None = None
+    mfa_enabled: bool = False
+    mfa_secret: str | None = None
     partner_id: int | None = None
     customer_id: int | None = None
     auth_provider: str | None = Field(default=None, max_length=50)
@@ -166,8 +212,10 @@ class UserUpdate(BaseModel):
     last_name: str | None = Field(default=None, max_length=100)
     avatar_url: str | None = Field(default=None, max_length=512)
     role_id: int | None = None
-    is_active: bool | None = None
-    is_verified: bool | None = None
+    status: str | None = Field(default=None, max_length=32)
+    email_verified_at: datetime | None = None
+    mfa_enabled: bool | None = None
+    mfa_secret: str | None = None
     partner_id: int | None = None
     customer_id: int | None = None
     auth_provider: str | None = Field(default=None, max_length=50)
@@ -192,8 +240,9 @@ class UserRead(BaseModel):
     last_name: str | None
     avatar_url: str | None
     role_id: int
-    is_active: bool
-    is_verified: bool
+    status: str
+    email_verified_at: datetime | None
+    mfa_enabled: bool
     partner_id: int | None
     customer_id: int | None
     auth_provider: str | None
@@ -290,24 +339,33 @@ class AppleOAuthRequest(BaseModel):
         return self
 
 
-# --- AI usage & monthly aggregates ---
+# --- AI token usage & partner balance ---
 
 
-class AiUsageLogCreate(BaseModel):
+class AiTokenUsageCreate(BaseModel):
     partner_id: int
     customer_id: int | None = None
     model: str = Field(max_length=100)
     input_tokens: int = Field(ge=0)
     output_tokens: int = Field(ge=0)
+    cache_read_tokens: int = Field(default=0, ge=0)
+    cache_write_tokens: int = Field(default=0, ge=0)
     total_tokens: int | None = Field(
         default=None,
         ge=0,
-        description="Defaults to input_tokens + output_tokens when omitted.",
+        description="Defaults to input + output + cache_read + cache_write when omitted.",
     )
     feature: str | None = Field(default=None, max_length=100)
+    ai_provider: str = Field(default="default", max_length=64)
+    provider_request_id: str | None = None
+    estimated_cost_cents: int | None = Field(default=None, ge=0)
+    billable_period: date | None = Field(
+        default=None,
+        description="First day of the billing month; defaults to the first day of the current UTC month.",
+    )
 
 
-class AiUsageLogRead(BaseModel):
+class AiTokenUsageRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -316,33 +374,42 @@ class AiUsageLogRead(BaseModel):
     model: str
     input_tokens: int
     output_tokens: int
-    total_tokens: int
+    cache_read_tokens: int
+    cache_write_tokens: int
+    total_tokens: int | None
     feature: str | None
+    ai_provider: str
+    provider_request_id: str | None
+    estimated_cost_cents: int | None
+    billable_period: date
     created_at: datetime
 
 
-class PartnerUsageMonthlyRead(BaseModel):
+class PartnerTokenBalanceRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
     partner_id: int
-    year: int
-    month: int
-    input_tokens: int
-    output_tokens: int
-    total_tokens: int
-    updated_at: datetime
+    billable_period: date
+    included_tokens: int
+    tokens_used: int
+    tokens_remaining: int | None
+    cap_warned_at: datetime | None
+    cap_reached_at: datetime | None
+    last_updated_at: datetime
 
 
-class PartnerUsageMonthlyCreate(BaseModel):
+class PartnerTokenBalanceCreate(BaseModel):
     partner_id: int
-    year: int = Field(ge=2000, le=2100)
-    month: int = Field(ge=1, le=12)
+    billable_period: date
+    included_tokens: int = Field(default=0, ge=0)
+    tokens_used: int = Field(default=0, ge=0)
 
 
-class PartnerUsageMonthlyUpdate(BaseModel):
+class PartnerTokenBalanceUpdate(BaseModel):
     """Patch rolling counters (e.g. background aggregation jobs)."""
 
-    input_tokens: int | None = Field(default=None, ge=0)
-    output_tokens: int | None = Field(default=None, ge=0)
-    total_tokens: int | None = Field(default=None, ge=0)
+    included_tokens: int | None = Field(default=None, ge=0)
+    tokens_used: int | None = Field(default=None, ge=0)
+    tokens_remaining: int | None = Field(default=None, ge=0)
+    cap_warned_at: datetime | None = None
+    cap_reached_at: datetime | None = None

@@ -7,10 +7,11 @@ from sqlalchemy import text
 
 from database import AsyncSessionLocal, engine
 from routers import (
-    ai_usage_logs,
+    ai_token_usage,
     auth,
     customers,
-    partner_usage_monthly,
+    industries,
+    partner_token_balance,
     partners,
     permissions,
     plans,
@@ -32,13 +33,14 @@ app = FastAPI(lifespan=lifespan)
 
 app.include_router(auth.router)
 app.include_router(plans.router)
+app.include_router(industries.router)
 app.include_router(partners.router)
 app.include_router(customers.router)
 app.include_router(roles.router)
 app.include_router(permissions.router)
 app.include_router(users.router)
-app.include_router(ai_usage_logs.router)
-app.include_router(partner_usage_monthly.router)
+app.include_router(ai_token_usage.router)
+app.include_router(partner_token_balance.router)
 
 
 @app.get("/")

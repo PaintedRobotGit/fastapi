@@ -8,27 +8,6 @@ Marketing management SaaS. Partners are agencies that purchase the platform; Cus
 
 ## Tables
 
-### `partners`
-Agency accounts that purchase and manage the platform.
-
-| Column | Type | Nullable | Default | Notes |
-|--------|------|----------|---------|-------|
-| `id` | `serial` | NO | auto-increment | PK |
-| `name` | `varchar(255)` | NO | | |
-| `email` | `varchar(255)` | YES | | Primary contact email |
-| `slug` | `varchar(100)` | YES | | URL-friendly identifier — unique |
-| `plan_id` | `integer` | NO | | FK → `plans.id` |
-| `timezone` | `varchar(100)` | NO | `'UTC'` | IANA timezone string |
-| `is_active` | `boolean` | NO | `true` | |
-| `trial_ends_at` | `timestamptz` | YES | | |
-| `subscription_expires_at` | `timestamptz` | YES | | |
-| `created_at` | `timestamptz` | NO | `now()` | |
-| `updated_at` | `timestamptz` | NO | `now()` | |
-
-**Constraints:** `slug` unique, `plan_id` FK → `plans.id` ON DELETE SET NULL
-
----
-
 ### `plans`
 Subscription tiers defining feature limits per partner account.
 
@@ -55,22 +34,68 @@ Subscription tiers defining feature limits per partner account.
 
 ---
 
+### `industries`
+Reference list for categorising customer accounts.
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| `id` | `serial` | NO | auto-increment | PK |
+| `name` | `text` | NO | | Unique |
+| `slug` | `text` | NO | | Unique. URL-friendly identifier |
+| `sort_order` | `integer` | NO | `0` | Display order |
+| `is_active` | `boolean` | NO | `true` | |
+| `created_at` | `timestamptz` | NO | `now()` | |
+
+**Seeded industries:** Retail, Finance, Health & Wellness, Technology, Real Estate, Food & Beverage, Education, Healthcare, Legal, Construction, Manufacturing, Non-Profit, Hospitality & Tourism, Automotive, Professional Services, E-commerce, Media & Entertainment, Other
+
+---
+
+### `partners`
+Agency accounts that purchase and manage the platform.
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| `id` | `serial` | NO | auto-increment | PK |
+| `name` | `varchar(255)` | NO | | |
+| `email` | `varchar(255)` | YES | | Primary contact email |
+| `slug` | `varchar(100)` | YES | | URL-friendly identifier — unique |
+| `plan_id` | `integer` | NO | | FK → `plans.id` ON DELETE SET NULL |
+| `timezone` | `varchar(100)` | NO | `'UTC'` | IANA timezone string |
+| `status` | `text` | NO | `'active'` | `trial`, `active`, `past_due`, `canceled`, `suspended` |
+| `trial_ends_at` | `timestamptz` | YES | | |
+| `subscription_expires_at` | `timestamptz` | YES | | |
+| `country` | `text` | YES | | |
+| `website` | `text` | YES | | |
+| `archived_at` | `timestamptz` | YES | | Set when status = `canceled` or `suspended` |
+| `created_at` | `timestamptz` | NO | `now()` | |
+| `updated_at` | `timestamptz` | NO | `now()` | |
+
+**Constraints:** `slug` unique; `partners_status_check` — status IN (trial, active, past_due, canceled, suspended)
+
+---
+
 ### `customers`
 Client accounts owned by a Partner.
 
 | Column | Type | Nullable | Default | Notes |
 |--------|------|----------|---------|-------|
 | `id` | `serial` | NO | auto-increment | PK |
-| `partner_id` | `integer` | NO | | FK → `partners.id` (cascade delete) |
+| `partner_id` | `integer` | NO | | FK → `partners.id` ON DELETE CASCADE |
 | `name` | `varchar(255)` | NO | | |
+| `slug` | `text` | NO | | Auto-generated from name; unique per partner |
 | `email` | `varchar(255)` | YES | | Primary contact email |
-| `industry` | `varchar(100)` | YES | | |
+| `industry_id` | `integer` | YES | | FK → `industries.id` |
 | `timezone` | `varchar(100)` | NO | `'UTC'` | IANA timezone string |
-| `is_active` | `boolean` | NO | `true` | |
+| `website_url` | `text` | YES | | |
+| `currency` | `text` | NO | `'USD'` | `USD`, `CAD`, `EUR`, `GBP`, `AUD` |
+| `customer_type` | `text` | YES | | `lead_gen`, `ecommerce`, `hybrid`, `other` |
+| `status` | `text` | NO | `'active'` | `prep`, `active`, `on_hold`, `archived` |
+| `notes` | `text` | YES | | Internal notes |
+| `archived_at` | `timestamptz` | YES | | Set when status = `archived` |
 | `created_at` | `timestamptz` | NO | `now()` | |
 | `updated_at` | `timestamptz` | NO | `now()` | |
 
-**Constraints:** `customers_partner_id_fkey` → `partners.id` ON DELETE CASCADE  
+**Constraints:** `uq_customer_partner_slug` — `(partner_id, slug)` unique; CHECK on `currency`, `customer_type`, `status`  
 **Indexes:** `idx_customers_partner_id` on `partner_id`
 
 ---
@@ -87,11 +112,13 @@ Individuals who log in. Must belong to at most one Partner or one Customer. Admi
 | `first_name` | `varchar(100)` | YES | | |
 | `last_name` | `varchar(100)` | YES | | |
 | `avatar_url` | `varchar(512)` | YES | | |
-| `role_id` | `integer` | NO | | FK → `roles.id` |
-| `is_active` | `boolean` | NO | `true` | |
-| `is_verified` | `boolean` | NO | `false` | |
-| `partner_id` | `integer` | YES | | FK → `partners.id` — mutually exclusive with `customer_id` |
-| `customer_id` | `integer` | YES | | FK → `customers.id` — mutually exclusive with `partner_id` |
+| `role_id` | `integer` | NO | | FK → `roles.id` ON DELETE SET NULL |
+| `status` | `text` | NO | `'active'` | `active`, `invited`, `suspended`, `deactivated` |
+| `email_verified_at` | `timestamptz` | YES | | NULL = not yet verified |
+| `mfa_enabled` | `boolean` | NO | `false` | |
+| `mfa_secret` | `text` | YES | | TOTP secret; null until MFA enrolled |
+| `partner_id` | `integer` | YES | | FK → `partners.id` ON DELETE SET NULL — mutually exclusive with `customer_id` |
+| `customer_id` | `integer` | YES | | FK → `customers.id` ON DELETE SET NULL — mutually exclusive with `partner_id` |
 | `auth_provider` | `varchar(50)` | YES | | `'google'`, `'apple'`, or null for email login |
 | `provider_id` | `varchar(255)` | YES | | User ID from the OAuth provider |
 | `access_token` | `text` | YES | | |
@@ -108,9 +135,7 @@ Individuals who log in. Must belong to at most one Partner or one Customer. Admi
 - `users_username_key` — `username` unique
 - `uq_provider_account` — `(auth_provider, provider_id)` unique
 - `chk_user_account_exclusive` — `num_nonnulls(partner_id, customer_id) <= 1`
-- `users_partner_id_fkey` → `partners.id` ON DELETE SET NULL
-- `users_customer_id_fkey` → `customers.id` ON DELETE SET NULL
-- `users_role_id_fkey` → `roles.id` ON DELETE SET NULL
+- `users_status_check` — status IN (active, invited, suspended, deactivated)
 
 ---
 
@@ -166,8 +191,8 @@ Junction table linking roles to their permissions.
 
 | Column | Type | Nullable | Notes |
 |--------|------|----------|-------|
-| `role_id` | `integer` | NO | PK, FK → `roles.id` (cascade delete) |
-| `permission_id` | `integer` | NO | PK, FK → `permissions.id` (cascade delete) |
+| `role_id` | `integer` | NO | PK, FK → `roles.id` ON DELETE CASCADE |
+| `permission_id` | `integer` | NO | PK, FK → `permissions.id` ON DELETE CASCADE |
 
 **Role permission matrix:**
 
@@ -184,41 +209,52 @@ Junction table linking roles to their permissions.
 
 ---
 
-### `ai_usage_logs`
-Per-request AI API usage log. Used for auditing and billing dispute resolution.
+### `ai_token_usage`
+Per-request AI API usage log. Used for auditing, billing dispute resolution, and per-period aggregation.
 
 | Column | Type | Nullable | Default | Notes |
 |--------|------|----------|---------|-------|
 | `id` | `bigserial` | NO | auto-increment | PK |
-| `partner_id` | `integer` | NO | | FK → `partners.id` (cascade delete) |
-| `customer_id` | `integer` | YES | | FK → `customers.id` — which customer triggered the call |
+| `partner_id` | `integer` | NO | | FK → `partners.id` ON DELETE CASCADE |
+| `customer_id` | `integer` | YES | | FK → `customers.id` ON DELETE SET NULL |
 | `model` | `varchar(100)` | NO | | e.g. `claude-sonnet-4-6` |
 | `input_tokens` | `integer` | NO | | |
 | `output_tokens` | `integer` | NO | | |
-| `total_tokens` | `integer` | NO | | Generated: `input_tokens + output_tokens` |
+| `cache_read_tokens` | `integer` | NO | `0` | Anthropic prompt cache read tokens |
+| `cache_write_tokens` | `integer` | NO | `0` | Anthropic prompt cache write tokens |
+| `total_tokens` | `integer` | YES | generated | `input + output + cache_read + cache_write` (STORED) |
 | `feature` | `varchar(100)` | YES | | What triggered the call e.g. `content_generation` |
+| `ai_provider` | `text` | NO | `'default'` | e.g. `anthropic`, `openai` |
+| `provider_request_id` | `text` | YES | | Request ID returned by the AI provider |
+| `estimated_cost_cents` | `integer` | YES | | Cost estimate in cents |
+| `billable_period` | `date` | NO | first of current month | Truncated to month for aggregation |
 | `created_at` | `timestamptz` | NO | `now()` | |
 
-**Indexes:** `idx_ai_usage_logs_partner_id`, `idx_ai_usage_logs_created_at`
+**Indexes:**
+- `idx_ai_token_usage_partner_period` on `(partner_id, billable_period)`
+- `idx_ai_token_usage_customer` on `(customer_id, created_at DESC)`
+- `idx_ai_token_usage_feature` on `(feature, created_at DESC)`
 
 ---
 
-### `partner_usage_monthly`
-Pre-aggregated monthly token usage per partner. Used for fast limit checking before each AI call.
+### `partner_token_balance`
+Pre-aggregated monthly token balance per partner. Used for fast limit checking before each AI call.
 
 | Column | Type | Nullable | Default | Notes |
 |--------|------|----------|---------|-------|
-| `id` | `serial` | NO | auto-increment | PK |
-| `partner_id` | `integer` | NO | | FK → `partners.id` (cascade delete) |
-| `year` | `smallint` | NO | | |
-| `month` | `smallint` | NO | | 1–12 |
-| `input_tokens` | `bigint` | NO | `0` | |
-| `output_tokens` | `bigint` | NO | `0` | |
-| `total_tokens` | `bigint` | NO | `0` | |
-| `updated_at` | `timestamptz` | NO | `now()` | |
+| `partner_id` | `integer` | NO | | PK, FK → `partners.id` ON DELETE CASCADE |
+| `billable_period` | `date` | NO | | PK. First day of the billing month |
+| `included_tokens` | `bigint` | NO | `0` | Tokens included in partner's plan for this period |
+| `tokens_used` | `bigint` | NO | `0` | Running total of tokens consumed |
+| `tokens_remaining` | `bigint` | YES | generated | `included_tokens - tokens_used` (STORED) |
+| `cap_warned_at` | `timestamptz` | YES | | When the 80% warning was triggered |
+| `cap_reached_at` | `timestamptz` | YES | | When the cap was hit; blocks further AI calls |
+| `last_updated_at` | `timestamptz` | NO | `now()` | |
 
-**Constraints:** `uq_partner_usage_monthly` — `(partner_id, year, month)` unique  
-**Indexes:** `idx_partner_usage_monthly_partner_id`
+**Constraints:** PK on `(partner_id, billable_period)`  
+**Indexes:**
+- `idx_partner_token_balance_partner` on `partner_id`
+- `idx_partner_token_balance_capped` on `(partner_id, billable_period)` WHERE `cap_reached_at IS NOT NULL`
 
 ---
 
@@ -228,15 +264,18 @@ Pre-aggregated monthly token usage per partner. Used for fast limit checking bef
 plans
   └── partners               (plan_id → plans.id)
 
+industries
+  └── customers              (industry_id → industries.id)
+
 partners
   └── customers              (partner_id → partners.id)
   └── users                  (partner_id → partners.id)
-  └── ai_usage_logs          (partner_id → partners.id)
-  └── partner_usage_monthly  (partner_id → partners.id)
+  └── ai_token_usage         (partner_id → partners.id)
+  └── partner_token_balance  (partner_id → partners.id)
 
 customers
   └── users                  (customer_id → customers.id)
-  └── ai_usage_logs          (customer_id → customers.id)
+  └── ai_token_usage         (customer_id → customers.id)
 
 roles
   └── users                  (role_id → roles.id)

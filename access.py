@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from deps import get_current_user
-from models import AiUsageLog, Customer, PartnerUsageMonthly, Role, User
+from models import AiTokenUsage, Customer, PartnerTokenBalance, Role, User
 
 
 @dataclass
@@ -142,7 +142,7 @@ async def validate_user_create_payload(
     raise HTTPException(status_code=403, detail="Forbidden.")
 
 
-async def ensure_ai_usage_log_resource(ctx: AccessContext, db: AsyncSession, row: AiUsageLog) -> None:
+async def ensure_ai_token_usage_resource(ctx: AccessContext, db: AsyncSession, row: AiTokenUsage) -> None:
     if ctx.is_admin:
         return
     ep = await effective_partner_id(db, ctx.user)
@@ -162,8 +162,8 @@ async def ensure_ai_usage_log_resource(ctx: AccessContext, db: AsyncSession, row
     raise HTTPException(status_code=403, detail="Forbidden.")
 
 
-async def ensure_partner_usage_monthly_resource(
-    ctx: AccessContext, db: AsyncSession, row: PartnerUsageMonthly
+async def ensure_partner_token_balance_resource(
+    ctx: AccessContext, db: AsyncSession, row: PartnerTokenBalance
 ) -> None:
     if ctx.is_admin:
         return

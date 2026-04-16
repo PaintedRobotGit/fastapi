@@ -140,7 +140,7 @@ async def oauth_google(payload: GoogleOAuthRequest, db: AsyncSession = Depends(g
         partner_id=partner_id,
         customer_id=customer_id,
         role_id=role_id,
-        is_verified=bool(info.get("email_verified", False)),
+        email_verified_at=datetime.now(timezone.utc) if info.get("email_verified") else None,
         first_name=(info.get("given_name") or None),
         last_name=(info.get("family_name") or None),
     )
@@ -205,7 +205,7 @@ async def oauth_apple(payload: AppleOAuthRequest, db: AsyncSession = Depends(get
         partner_id=partner_id,
         customer_id=customer_id,
         role_id=role_id,
-        is_verified=bool(claims.get("email_verified", True)),
+        email_verified_at=datetime.now(timezone.utc) if claims.get("email_verified", True) else None,
     )
     db.add(user)
     try:
