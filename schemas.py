@@ -86,6 +86,29 @@ class PartnerWithCustomersRead(BaseModel):
     customers: list[CustomerRead]
 
 
+# --- Roles & permissions (read models aligned with docs/database.md) ---
+
+
+class RoleRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    tier: str
+    description: str | None = None
+    is_default: bool
+    created_at: datetime
+
+
+class PermissionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    key: str = Field(max_length=100)
+    description: str | None = None
+    created_at: datetime
+
+
 # --- Users ---
 
 
@@ -96,7 +119,7 @@ class UserCreate(BaseModel):
     first_name: str | None = Field(default=None, max_length=100)
     last_name: str | None = Field(default=None, max_length=100)
     avatar_url: str | None = Field(default=None, max_length=512)
-    role: str = Field(default="user", max_length=50)
+    role_id: int
     is_active: bool = True
     is_verified: bool = False
     partner_id: int | None = None
@@ -111,10 +134,9 @@ class UserCreate(BaseModel):
     last_login: datetime | None = None
 
     @model_validator(mode="after")
-    def exactly_one_scope(self) -> UserCreate:
-        p, c = self.partner_id, self.customer_id
-        if (p is None) == (c is None):
-            raise ValueError("Exactly one of partner_id or customer_id must be set")
+    def at_most_one_partner_customer(self) -> UserCreate:
+        if self.partner_id is not None and self.customer_id is not None:
+            raise ValueError("partner_id and customer_id cannot both be set")
         return self
 
 
@@ -125,7 +147,7 @@ class UserUpdate(BaseModel):
     first_name: str | None = Field(default=None, max_length=100)
     last_name: str | None = Field(default=None, max_length=100)
     avatar_url: str | None = Field(default=None, max_length=512)
-    role: str | None = Field(default=None, max_length=50)
+    role_id: int | None = None
     is_active: bool | None = None
     is_verified: bool | None = None
     partner_id: int | None = None
@@ -141,7 +163,7 @@ class UserUpdate(BaseModel):
 
 
 class UserRead(BaseModel):
-    """Row fields for API responses; OAuth token fields omitted."""
+    """API user row; OAuth secrets omitted."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -151,7 +173,7 @@ class UserRead(BaseModel):
     first_name: str | None
     last_name: str | None
     avatar_url: str | None
-    role: str
+    role_id: int
     is_active: bool
     is_verified: bool
     partner_id: int | None
@@ -166,9 +188,10 @@ class UserRead(BaseModel):
 
 
 class UserMe(BaseModel):
-    """Session user plus owning partner (agency) and optional customer account."""
+    """Session user, role, and optional partner/customer context."""
 
     user: UserRead
+    role: RoleRead | None = None
     partner: PartnerRead | None = None
     customer: CustomerRead | None = None
 
@@ -187,38 +210,55 @@ class LoginRequest(BaseModel):
 
 
 class RegisterRequest(BaseModel):
-    """Email/password sign-up; user must belong to exactly one partner or one customer."""
+    """Email/password sign-up. Default roles: partner_member / customer_member when scoped."""
 
     email: str = Field(max_length=255)
     password: str = Field(min_length=8, max_length=512)
     partner_id: int | None = None
     customer_id: int | None = None
+    role_id: int | None = Field(
+        default=None,
+        description="Required if neither partner_id nor customer_id is set (admin-tier roles).",
+    )
     first_name: str | None = Field(default=None, max_length=100)
     last_name: str | None = Field(default=None, max_length=100)
 
     @model_validator(mode="after")
-    def exactly_one_scope(self) -> RegisterRequest:
-        p, c = self.partner_id, self.customer_id
-        if (p is None) == (c is None):
-            raise ValueError("Exactly one of partner_id or customer_id must be set")
+    def partner_customer_at_most_one(self) -> RegisterRequest:
+        if self.partner_id is not None and self.customer_id is not None:
+            raise ValueError("partner_id and customer_id cannot both be set")
         return self
 
 
 class GoogleOAuthRequest(BaseModel):
-    """Exchange a Google ID token for an API access token.
-
-    If no user exists yet for this Google account, provide exactly one of partner_id or
-    customer_id so a row can be created (invite-style onboarding).
-    """
+    """Exchange a Google ID token for an API access token."""
 
     id_token: str = Field(min_length=10)
     partner_id: int | None = None
     customer_id: int | None = None
+    role_id: int | None = Field(
+        default=None,
+        description="When creating a user without partner/customer scope, set an admin-tier role_id.",
+    )
+
+    @model_validator(mode="after")
+    def scope_at_most_one(self) -> GoogleOAuthRequest:
+        if self.partner_id is not None and self.customer_id is not None:
+            raise ValueError("partner_id and customer_id cannot both be set")
+        return self
 
 
 class AppleOAuthRequest(BaseModel):
     identity_token: str = Field(min_length=10)
     partner_id: int | None = None
     customer_id: int | None = None
+    role_id: int | None = Field(
+        default=None,
+        description="When creating a user without partner/customer scope, set an admin-tier role_id.",
+    )
 
-
+    @model_validator(mode="after")
+    def scope_at_most_one(self) -> AppleOAuthRequest:
+        if self.partner_id is not None and self.customer_id is not None:
+            raise ValueError("partner_id and customer_id cannot both be set")
+        return self

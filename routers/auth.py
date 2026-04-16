@@ -11,6 +11,7 @@ from deps import get_current_user
 from me import build_user_me
 from models import Customer, Partner, User
 from oauth_providers import verify_apple_identity_token, verify_google_id_token
+from role_utils import resolve_role_id_for_signup
 from schemas import (
     AppleOAuthRequest,
     GoogleOAuthRequest,
@@ -22,14 +23,6 @@ from schemas import (
 from security import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-
-def _assert_partner_xor_customer(partner_id: int | None, customer_id: int | None) -> None:
-    if (partner_id is None) == (customer_id is None):
-        raise HTTPException(
-            status_code=400,
-            detail="Exactly one of partner_id or customer_id must be set.",
-        )
 
 
 async def _user_by_oauth(db: AsyncSession, provider: str, provider_id: str) -> User | None:
@@ -50,12 +43,17 @@ def _issue_token(user_id: int) -> TokenResponse:
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
 async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
-    _assert_partner_xor_customer(payload.partner_id, payload.customer_id)
     if payload.partner_id is not None and await db.get(Partner, payload.partner_id) is None:
         raise HTTPException(status_code=400, detail="Partner does not exist for partner_id.")
     if payload.customer_id is not None and await db.get(Customer, payload.customer_id) is None:
         raise HTTPException(status_code=400, detail="Customer does not exist for customer_id.")
 
+    role_id = await resolve_role_id_for_signup(
+        db,
+        partner_id=payload.partner_id,
+        customer_id=payload.customer_id,
+        role_id=payload.role_id,
+    )
     user = User(
         email=payload.email.lower().strip(),
         first_name=payload.first_name,
@@ -63,6 +61,7 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
         password_hash=hash_password(payload.password),
         partner_id=payload.partner_id,
         customer_id=payload.customer_id,
+        role_id=role_id,
         auth_provider="email",
         provider_id=None,
     )
@@ -122,16 +121,17 @@ async def oauth_google(payload: GoogleOAuthRequest, db: AsyncSession = Depends(g
         )
 
     partner_id, customer_id = payload.partner_id, payload.customer_id
-    if partner_id is None and customer_id is None:
-        raise HTTPException(
-            status_code=404,
-            detail="No user linked to this Google account. Register with partner_id or customer_id first.",
-        )
-    _assert_partner_xor_customer(partner_id, customer_id)
     if partner_id is not None and await db.get(Partner, partner_id) is None:
         raise HTTPException(status_code=400, detail="Partner does not exist for partner_id.")
     if customer_id is not None and await db.get(Customer, customer_id) is None:
         raise HTTPException(status_code=400, detail="Customer does not exist for customer_id.")
+
+    role_id = await resolve_role_id_for_signup(
+        db,
+        partner_id=partner_id,
+        customer_id=customer_id,
+        role_id=payload.role_id,
+    )
 
     user = User(
         email=email,
@@ -139,6 +139,7 @@ async def oauth_google(payload: GoogleOAuthRequest, db: AsyncSession = Depends(g
         provider_id=sub,
         partner_id=partner_id,
         customer_id=customer_id,
+        role_id=role_id,
         is_verified=bool(info.get("email_verified", False)),
         first_name=(info.get("given_name") or None),
         last_name=(info.get("family_name") or None),
@@ -185,16 +186,17 @@ async def oauth_apple(payload: AppleOAuthRequest, db: AsyncSession = Depends(get
         )
 
     partner_id, customer_id = payload.partner_id, payload.customer_id
-    if partner_id is None and customer_id is None:
-        raise HTTPException(
-            status_code=404,
-            detail="No user linked to this Apple account. Register with partner_id or customer_id first.",
-        )
-    _assert_partner_xor_customer(partner_id, customer_id)
     if partner_id is not None and await db.get(Partner, partner_id) is None:
         raise HTTPException(status_code=400, detail="Partner does not exist for partner_id.")
     if customer_id is not None and await db.get(Customer, customer_id) is None:
         raise HTTPException(status_code=400, detail="Customer does not exist for customer_id.")
+
+    role_id = await resolve_role_id_for_signup(
+        db,
+        partner_id=partner_id,
+        customer_id=customer_id,
+        role_id=payload.role_id,
+    )
 
     user = User(
         email=email,
@@ -202,6 +204,7 @@ async def oauth_apple(payload: AppleOAuthRequest, db: AsyncSession = Depends(get
         provider_id=sub,
         partner_id=partner_id,
         customer_id=customer_id,
+        role_id=role_id,
         is_verified=bool(claims.get("email_verified", True)),
     )
     db.add(user)
