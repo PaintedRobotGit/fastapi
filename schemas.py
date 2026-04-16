@@ -165,3 +165,60 @@ class UserRead(BaseModel):
     updated_at: datetime
 
 
+class UserMe(BaseModel):
+    """Session user plus owning partner (agency) and optional customer account."""
+
+    user: UserRead
+    partner: PartnerRead | None = None
+    customer: CustomerRead | None = None
+
+
+# --- Auth ---
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(max_length=255)
+    password: str = Field(min_length=1, max_length=512)
+
+
+class RegisterRequest(BaseModel):
+    """Email/password sign-up; user must belong to exactly one partner or one customer."""
+
+    email: str = Field(max_length=255)
+    password: str = Field(min_length=8, max_length=512)
+    partner_id: int | None = None
+    customer_id: int | None = None
+    first_name: str | None = Field(default=None, max_length=100)
+    last_name: str | None = Field(default=None, max_length=100)
+
+    @model_validator(mode="after")
+    def exactly_one_scope(self) -> RegisterRequest:
+        p, c = self.partner_id, self.customer_id
+        if (p is None) == (c is None):
+            raise ValueError("Exactly one of partner_id or customer_id must be set")
+        return self
+
+
+class GoogleOAuthRequest(BaseModel):
+    """Exchange a Google ID token for an API access token.
+
+    If no user exists yet for this Google account, provide exactly one of partner_id or
+    customer_id so a row can be created (invite-style onboarding).
+    """
+
+    id_token: str = Field(min_length=10)
+    partner_id: int | None = None
+    customer_id: int | None = None
+
+
+class AppleOAuthRequest(BaseModel):
+    identity_token: str = Field(min_length=10)
+    partner_id: int | None = None
+    customer_id: int | None = None
+
+

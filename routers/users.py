@@ -4,8 +4,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from deps import get_current_user
+from me import build_user_me
 from models import Customer, Partner, User
-from schemas import UserCreate, UserRead, UserUpdate
+from schemas import UserCreate, UserRead, UserMe, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -34,6 +36,14 @@ async def list_users(
     stmt = stmt.offset(skip).limit(limit)
     result = await db.execute(stmt)
     return list(result.scalars().all())
+
+
+@router.get("/me", response_model=UserMe)
+async def read_me(
+    current: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> UserMe:
+    """Same payload as `GET /auth/me` — current user plus partner/customer context."""
+    return await build_user_me(db, current)
 
 
 @router.get("/{user_id}", response_model=UserRead)

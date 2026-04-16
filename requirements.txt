@@ -3,3 +3,7 @@ hypercorn==0.14.4
 pydantic-settings==2.1.0
 psycopg[binary]==3.2.3
 sqlalchemy[asyncio]==2.0.36
+passlib[bcrypt]==1.7.4
+PyJWT==2.9.0
+google-auth==2.37.0
+cryptography>=42.0.0
