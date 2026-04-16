@@ -17,7 +17,7 @@ Agency accounts that purchase and manage the platform.
 | `name` | `varchar(255)` | NO | | |
 | `email` | `varchar(255)` | YES | | Primary contact email |
 | `slug` | `varchar(100)` | YES | | URL-friendly identifier — unique |
-| `plan` | `varchar(50)` | NO | `'trial'` | `trial`, `starter`, `pro`, `enterprise` |
+| `plan_id` | `integer` | NO | | FK → `plans.id` |
 | `timezone` | `varchar(100)` | NO | `'UTC'` | IANA timezone string |
 | `is_active` | `boolean` | NO | `true` | |
 | `trial_ends_at` | `timestamptz` | YES | | |
@@ -25,7 +25,33 @@ Agency accounts that purchase and manage the platform.
 | `created_at` | `timestamptz` | NO | `now()` | |
 | `updated_at` | `timestamptz` | NO | `now()` | |
 
-**Constraints:** `slug` unique
+**Constraints:** `slug` unique, `plan_id` FK → `plans.id` ON DELETE SET NULL
+
+---
+
+### `plans`
+Subscription tiers defining feature limits per partner account.
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| `id` | `serial` | NO | auto-increment | PK |
+| `name` | `varchar(50)` | NO | | Unique. `trial`, `starter`, `pro`, `enterprise` |
+| `monthly_token_limit` | `integer` | YES | | NULL = unlimited (enterprise) |
+| `max_customers` | `integer` | YES | | NULL = unlimited |
+| `max_users` | `integer` | YES | | NULL = unlimited |
+| `price_monthly` | `numeric(10,2)` | YES | | NULL = custom pricing |
+| `is_active` | `boolean` | NO | `true` | |
+| `created_at` | `timestamptz` | NO | `now()` | |
+| `updated_at` | `timestamptz` | NO | `now()` | |
+
+**Seeded plans:**
+
+| Name | Token Limit | Max Customers | Max Users | Price/mo |
+|------|-------------|---------------|-----------|----------|
+| `trial` | 500,000 | 3 | 5 | $0 |
+| `starter` | 2,000,000 | 10 | 15 | $49 |
+| `pro` | 10,000,000 | 50 | 100 | $149 |
+| `enterprise` | Unlimited | Unlimited | Unlimited | Custom |
 
 ---
 
@@ -158,20 +184,64 @@ Junction table linking roles to their permissions.
 
 ---
 
+### `ai_usage_logs`
+Per-request AI API usage log. Used for auditing and billing dispute resolution.
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| `id` | `bigserial` | NO | auto-increment | PK |
+| `partner_id` | `integer` | NO | | FK → `partners.id` (cascade delete) |
+| `customer_id` | `integer` | YES | | FK → `customers.id` — which customer triggered the call |
+| `model` | `varchar(100)` | NO | | e.g. `claude-sonnet-4-6` |
+| `input_tokens` | `integer` | NO | | |
+| `output_tokens` | `integer` | NO | | |
+| `total_tokens` | `integer` | NO | | Generated: `input_tokens + output_tokens` |
+| `feature` | `varchar(100)` | YES | | What triggered the call e.g. `content_generation` |
+| `created_at` | `timestamptz` | NO | `now()` | |
+
+**Indexes:** `idx_ai_usage_logs_partner_id`, `idx_ai_usage_logs_created_at`
+
+---
+
+### `partner_usage_monthly`
+Pre-aggregated monthly token usage per partner. Used for fast limit checking before each AI call.
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| `id` | `serial` | NO | auto-increment | PK |
+| `partner_id` | `integer` | NO | | FK → `partners.id` (cascade delete) |
+| `year` | `smallint` | NO | | |
+| `month` | `smallint` | NO | | 1–12 |
+| `input_tokens` | `bigint` | NO | `0` | |
+| `output_tokens` | `bigint` | NO | `0` | |
+| `total_tokens` | `bigint` | NO | `0` | |
+| `updated_at` | `timestamptz` | NO | `now()` | |
+
+**Constraints:** `uq_partner_usage_monthly` — `(partner_id, year, month)` unique  
+**Indexes:** `idx_partner_usage_monthly_partner_id`
+
+---
+
 ## Relationships
 
 ```
+plans
+  └── partners               (plan_id → plans.id)
+
 partners
-  └── customers        (partner_id → partners.id)
-  └── users            (partner_id → partners.id)
+  └── customers              (partner_id → partners.id)
+  └── users                  (partner_id → partners.id)
+  └── ai_usage_logs          (partner_id → partners.id)
+  └── partner_usage_monthly  (partner_id → partners.id)
 
 customers
-  └── users            (customer_id → customers.id)
+  └── users                  (customer_id → customers.id)
+  └── ai_usage_logs          (customer_id → customers.id)
 
 roles
-  └── users            (role_id → roles.id)
-  └── role_permissions (role_id → roles.id)
+  └── users                  (role_id → roles.id)
+  └── role_permissions       (role_id → roles.id)
 
 permissions
-  └── role_permissions (permission_id → permissions.id)
+  └── role_permissions       (permission_id → permissions.id)
 ```

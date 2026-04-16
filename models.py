@@ -1,12 +1,43 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, false, true
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    SmallInteger,
+    String,
+    Text,
+    UniqueConstraint,
+    false,
+    true,
+)
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, text
 
 from database import Base
+
+
+class Plan(Base):
+    __tablename__ = "plans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    monthly_token_limit: Mapped[int | None] = mapped_column(Integer)
+    max_customers: Mapped[int | None] = mapped_column(Integer)
+    max_users: Mapped[int | None] = mapped_column(Integer)
+    price_monthly: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=true())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
 
 
 class Partner(Base):
@@ -16,7 +47,7 @@ class Partner(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str | None] = mapped_column(String(255))
     slug: Mapped[str | None] = mapped_column(String(100), unique=True)
-    plan: Mapped[str] = mapped_column(String(50), nullable=False, server_default="trial")
+    plan_id: Mapped[int] = mapped_column(Integer, ForeignKey("plans.id", ondelete="RESTRICT"), nullable=False)
     timezone: Mapped[str] = mapped_column(String(100), nullable=False, server_default="UTC")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=true())
     trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -100,6 +131,45 @@ class User(Base):
     scope: Mapped[str | None] = mapped_column(String(512))
     last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class AiUsageLog(Base):
+    __tablename__ = "ai_usage_logs"
+
+    __table_args__ = (
+        Index("idx_ai_usage_logs_partner_id", "partner_id"),
+        Index("idx_ai_usage_logs_created_at", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    partner_id: Mapped[int] = mapped_column(Integer, ForeignKey("partners.id", ondelete="CASCADE"), nullable=False)
+    customer_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("customers.id", ondelete="SET NULL"))
+    model: Mapped[str] = mapped_column(String(100), nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    total_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    feature: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class PartnerUsageMonthly(Base):
+    __tablename__ = "partner_usage_monthly"
+
+    __table_args__ = (
+        UniqueConstraint("partner_id", "year", "month", name="uq_partner_usage_monthly"),
+        Index("idx_partner_usage_monthly_partner_id", "partner_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    partner_id: Mapped[int] = mapped_column(Integer, ForeignKey("partners.id", ondelete="CASCADE"), nullable=False)
+    year: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    month: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    input_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"))
+    output_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"))
+    total_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )

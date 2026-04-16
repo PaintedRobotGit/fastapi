@@ -1,10 +1,10 @@
-"""Build `/me` responses with resolved role, permissions, partner, and customer."""
+"""Build `/me` responses with resolved role, permissions, partner, plan, and customer."""
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import Customer, Partner, Permission, Role, RolePermission, User
-from schemas import CustomerRead, PartnerRead, PermissionRead, RoleRead, UserMe, UserRead
+from models import Customer, Partner, Permission, Plan, Role, RolePermission, User
+from schemas import CustomerRead, PartnerRead, PermissionRead, PlanRead, RoleRead, UserMe, UserRead
 
 
 async def build_user_me(db: AsyncSession, user: User) -> UserMe:
@@ -24,6 +24,7 @@ async def build_user_me(db: AsyncSession, user: User) -> UserMe:
 
     partner_row: Partner | None = None
     customer_row: Customer | None = None
+    plan_row: Plan | None = None
 
     if user.partner_id is not None:
         partner_row = await db.get(Partner, user.partner_id)
@@ -32,7 +33,11 @@ async def build_user_me(db: AsyncSession, user: User) -> UserMe:
         if customer_row is not None:
             partner_row = await db.get(Partner, customer_row.partner_id)
 
+    if partner_row is not None:
+        plan_row = await db.get(Plan, partner_row.plan_id)
+
     partner_out = PartnerRead.model_validate(partner_row) if partner_row is not None else None
+    plan_out = PlanRead.model_validate(plan_row) if plan_row is not None else None
     customer_out = CustomerRead.model_validate(customer_row) if customer_row is not None else None
 
     return UserMe(
@@ -40,5 +45,6 @@ async def build_user_me(db: AsyncSession, user: User) -> UserMe:
         role=role_out,
         permissions=permissions_out,
         partner=partner_out,
+        partner_plan=plan_out,
         customer=customer_out,
     )

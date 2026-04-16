@@ -1,8 +1,26 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+# --- Plans ---
+
+
+class PlanRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str = Field(max_length=50)
+    monthly_token_limit: int | None = None
+    max_customers: int | None = None
+    max_users: int | None = None
+    price_monthly: Decimal | None = None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
 
 
 # --- Partners ---
@@ -12,7 +30,7 @@ class PartnerCreate(BaseModel):
     name: str = Field(max_length=255)
     email: str | None = Field(default=None, max_length=255)
     slug: str | None = Field(default=None, max_length=100)
-    plan: str = Field(default="trial", max_length=50)
+    plan_id: int
     timezone: str = Field(default="UTC", max_length=100)
     is_active: bool = True
     trial_ends_at: datetime | None = None
@@ -23,7 +41,7 @@ class PartnerUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=255)
     email: str | None = Field(default=None, max_length=255)
     slug: str | None = Field(default=None, max_length=100)
-    plan: str | None = Field(default=None, max_length=50)
+    plan_id: int | None = None
     timezone: str | None = Field(default=None, max_length=100)
     is_active: bool | None = None
     trial_ends_at: datetime | None = None
@@ -37,7 +55,7 @@ class PartnerRead(BaseModel):
     name: str
     email: str | None
     slug: str | None
-    plan: str
+    plan_id: int
     timezone: str
     is_active: bool
     trial_ends_at: datetime | None
@@ -197,6 +215,10 @@ class UserMe(BaseModel):
         description="Permissions granted by the user's role (for menus/UI); enforce rules on each endpoint too.",
     )
     partner: PartnerRead | None = None
+    partner_plan: PlanRead | None = Field(
+        default=None,
+        description="Subscription plan for the resolved partner (when applicable).",
+    )
     customer: CustomerRead | None = None
 
 
@@ -266,3 +288,61 @@ class AppleOAuthRequest(BaseModel):
         if self.partner_id is not None and self.customer_id is not None:
             raise ValueError("partner_id and customer_id cannot both be set")
         return self
+
+
+# --- AI usage & monthly aggregates ---
+
+
+class AiUsageLogCreate(BaseModel):
+    partner_id: int
+    customer_id: int | None = None
+    model: str = Field(max_length=100)
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
+    total_tokens: int | None = Field(
+        default=None,
+        ge=0,
+        description="Defaults to input_tokens + output_tokens when omitted.",
+    )
+    feature: str | None = Field(default=None, max_length=100)
+
+
+class AiUsageLogRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    partner_id: int
+    customer_id: int | None
+    model: str
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    feature: str | None
+    created_at: datetime
+
+
+class PartnerUsageMonthlyRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    partner_id: int
+    year: int
+    month: int
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    updated_at: datetime
+
+
+class PartnerUsageMonthlyCreate(BaseModel):
+    partner_id: int
+    year: int = Field(ge=2000, le=2100)
+    month: int = Field(ge=1, le=12)
+
+
+class PartnerUsageMonthlyUpdate(BaseModel):
+    """Patch rolling counters (e.g. background aggregation jobs)."""
+
+    input_tokens: int | None = Field(default=None, ge=0)
+    output_tokens: int | None = Field(default=None, ge=0)
+    total_tokens: int | None = Field(default=None, ge=0)

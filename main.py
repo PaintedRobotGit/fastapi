@@ -6,7 +6,17 @@ from fastapi import FastAPI, HTTPException
 from sqlalchemy import text
 
 from database import AsyncSessionLocal, engine
-from routers import auth, customers, partners, permissions, roles, users
+from routers import (
+    ai_usage_logs,
+    auth,
+    customers,
+    partner_usage_monthly,
+    partners,
+    permissions,
+    plans,
+    roles,
+    users,
+)
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -21,11 +31,14 @@ async def lifespan(_: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 app.include_router(auth.router)
+app.include_router(plans.router)
 app.include_router(partners.router)
 app.include_router(customers.router)
 app.include_router(roles.router)
 app.include_router(permissions.router)
 app.include_router(users.router)
+app.include_router(ai_usage_logs.router)
+app.include_router(partner_usage_monthly.router)
 
 
 @app.get("/")

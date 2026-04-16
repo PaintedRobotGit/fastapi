@@ -4,7 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from models import Customer, Partner
+from models import Customer, Partner, Plan
 from schemas import PartnerCreate, PartnerRead, PartnerUpdate, PartnerWithCustomersRead
 
 router = APIRouter(prefix="/partners", tags=["partners"])
@@ -44,6 +44,8 @@ async def get_partner(partner_id: int, db: AsyncSession = Depends(get_db)) -> Pa
 
 @router.post("/", response_model=PartnerRead, status_code=201)
 async def create_partner(payload: PartnerCreate, db: AsyncSession = Depends(get_db)) -> Partner:
+    if await db.get(Plan, payload.plan_id) is None:
+        raise HTTPException(status_code=400, detail="Invalid plan_id.")
     partner = Partner(**payload.model_dump())
     db.add(partner)
     try:
@@ -64,7 +66,10 @@ async def update_partner(
     partner = await db.get(Partner, partner_id)
     if partner is None:
         raise HTTPException(status_code=404, detail="Partner not found")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+    if "plan_id" in updates and await db.get(Plan, updates["plan_id"]) is None:
+        raise HTTPException(status_code=400, detail="Invalid plan_id.")
+    for field, value in updates.items():
         setattr(partner, field, value)
     try:
         await db.flush()
