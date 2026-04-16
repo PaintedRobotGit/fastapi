@@ -4,8 +4,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from models import Partner
-from schemas import PartnerCreate, PartnerRead, PartnerUpdate
+from models import Customer, Partner
+from schemas import PartnerCreate, PartnerRead, PartnerUpdate, PartnerWithCustomersRead
 
 router = APIRouter(prefix="/partners", tags=["partners"])
 
@@ -18,6 +18,20 @@ async def list_partners(
 ) -> list[Partner]:
     result = await db.execute(select(Partner).order_by(Partner.id).offset(skip).limit(limit))
     return list(result.scalars().all())
+
+
+@router.get("/{partner_id}/customers", response_model=PartnerWithCustomersRead)
+async def get_partner_with_customers(
+    partner_id: int, db: AsyncSession = Depends(get_db)
+) -> PartnerWithCustomersRead:
+    partner = await db.get(Partner, partner_id)
+    if partner is None:
+        raise HTTPException(status_code=404, detail="Partner not found")
+    res = await db.execute(
+        select(Customer).where(Customer.partner_id == partner_id).order_by(Customer.id)
+    )
+    customers = list(res.scalars().all())
+    return PartnerWithCustomersRead(partner=partner, customers=customers)
 
 
 @router.get("/{partner_id}", response_model=PartnerRead)

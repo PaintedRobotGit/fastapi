@@ -81,6 +81,11 @@ class CustomerRead(BaseModel):
     updated_at: datetime
 
 
+class PartnerWithCustomersRead(BaseModel):
+    partner: PartnerRead
+    customers: list[CustomerRead]
+
+
 # --- Users ---
 
 
