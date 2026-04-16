@@ -188,10 +188,14 @@ class UserRead(BaseModel):
 
 
 class UserMe(BaseModel):
-    """Session user, role, and optional partner/customer context."""
+    """Session user, role, optional partner/customer context, and role permissions (UI hints only)."""
 
     user: UserRead
     role: RoleRead | None = None
+    permissions: list[PermissionRead] = Field(
+        default_factory=list,
+        description="Permissions granted by the user's role (for menus/UI); enforce rules on each endpoint too.",
+    )
     partner: PartnerRead | None = None
     customer: CustomerRead | None = None
 
