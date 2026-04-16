@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from access import AccessContext, get_access_context
 from database import get_db
 from models import Permission, Role, RolePermission
 from schemas import PermissionRead, RoleRead
@@ -11,6 +12,7 @@ router = APIRouter(prefix="/roles", tags=["roles"])
 
 @router.get("/", response_model=list[RoleRead])
 async def list_roles(
+    ctx: AccessContext = Depends(get_access_context),
     db: AsyncSession = Depends(get_db),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
@@ -25,7 +27,11 @@ async def list_roles(
 
 
 @router.get("/{role_id}/permissions", response_model=list[PermissionRead])
-async def list_role_permissions(role_id: int, db: AsyncSession = Depends(get_db)) -> list[Permission]:
+async def list_role_permissions(
+    role_id: int,
+    ctx: AccessContext = Depends(get_access_context),
+    db: AsyncSession = Depends(get_db),
+) -> list[Permission]:
     role = await db.get(Role, role_id)
     if role is None:
         raise HTTPException(status_code=404, detail="Role not found")
@@ -40,7 +46,11 @@ async def list_role_permissions(role_id: int, db: AsyncSession = Depends(get_db)
 
 
 @router.get("/{role_id}", response_model=RoleRead)
-async def get_role(role_id: int, db: AsyncSession = Depends(get_db)) -> Role:
+async def get_role(
+    role_id: int,
+    ctx: AccessContext = Depends(get_access_context),
+    db: AsyncSession = Depends(get_db),
+) -> Role:
     role = await db.get(Role, role_id)
     if role is None:
         raise HTTPException(status_code=404, detail="Role not found")

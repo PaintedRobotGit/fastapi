@@ -3,6 +3,13 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from access import (
+    AccessContext,
+    effective_partner_id,
+    ensure_partner_resource,
+    get_access_context,
+    require_admin,
+)
 from database import get_db
 from models import Customer, Partner, Plan
 from schemas import PartnerCreate, PartnerRead, PartnerUpdate, PartnerWithCustomersRead
@@ -12,18 +19,30 @@ router = APIRouter(prefix="/partners", tags=["partners"])
 
 @router.get("/", response_model=list[PartnerRead])
 async def list_partners(
+    ctx: AccessContext = Depends(get_access_context),
     db: AsyncSession = Depends(get_db),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
 ) -> list[Partner]:
-    result = await db.execute(select(Partner).order_by(Partner.id).offset(skip).limit(limit))
+    if ctx.is_admin:
+        result = await db.execute(select(Partner).order_by(Partner.id).offset(skip).limit(limit))
+        return list(result.scalars().all())
+    ep = await effective_partner_id(db, ctx.user)
+    if ep is None:
+        return []
+    result = await db.execute(
+        select(Partner).where(Partner.id == ep).offset(skip).limit(limit)
+    )
     return list(result.scalars().all())
 
 
 @router.get("/{partner_id}/customers", response_model=PartnerWithCustomersRead)
 async def get_partner_with_customers(
-    partner_id: int, db: AsyncSession = Depends(get_db)
+    partner_id: int,
+    ctx: AccessContext = Depends(get_access_context),
+    db: AsyncSession = Depends(get_db),
 ) -> PartnerWithCustomersRead:
+    await ensure_partner_resource(ctx, db, partner_id)
     partner = await db.get(Partner, partner_id)
     if partner is None:
         raise HTTPException(status_code=404, detail="Partner not found")
@@ -35,7 +54,12 @@ async def get_partner_with_customers(
 
 
 @router.get("/{partner_id}", response_model=PartnerRead)
-async def get_partner(partner_id: int, db: AsyncSession = Depends(get_db)) -> Partner:
+async def get_partner(
+    partner_id: int,
+    ctx: AccessContext = Depends(get_access_context),
+    db: AsyncSession = Depends(get_db),
+) -> Partner:
+    await ensure_partner_resource(ctx, db, partner_id)
     partner = await db.get(Partner, partner_id)
     if partner is None:
         raise HTTPException(status_code=404, detail="Partner not found")
@@ -43,7 +67,12 @@ async def get_partner(partner_id: int, db: AsyncSession = Depends(get_db)) -> Pa
 
 
 @router.post("/", response_model=PartnerRead, status_code=201)
-async def create_partner(payload: PartnerCreate, db: AsyncSession = Depends(get_db)) -> Partner:
+async def create_partner(
+    payload: PartnerCreate,
+    ctx: AccessContext = Depends(get_access_context),
+    db: AsyncSession = Depends(get_db),
+) -> Partner:
+    require_admin(ctx)
     if await db.get(Plan, payload.plan_id) is None:
         raise HTTPException(status_code=400, detail="Invalid plan_id.")
     partner = Partner(**payload.model_dump())
@@ -61,11 +90,17 @@ async def create_partner(payload: PartnerCreate, db: AsyncSession = Depends(get_
 
 @router.patch("/{partner_id}", response_model=PartnerRead)
 async def update_partner(
-    partner_id: int, payload: PartnerUpdate, db: AsyncSession = Depends(get_db)
+    partner_id: int,
+    payload: PartnerUpdate,
+    ctx: AccessContext = Depends(get_access_context),
+    db: AsyncSession = Depends(get_db),
 ) -> Partner:
+    await ensure_partner_resource(ctx, db, partner_id)
     partner = await db.get(Partner, partner_id)
     if partner is None:
         raise HTTPException(status_code=404, detail="Partner not found")
+    if ctx.tier == "customer":
+        raise HTTPException(status_code=403, detail="Cannot update partner with this account type.")
     updates = payload.model_dump(exclude_unset=True)
     if "plan_id" in updates and await db.get(Plan, updates["plan_id"]) is None:
         raise HTTPException(status_code=400, detail="Invalid plan_id.")
@@ -80,7 +115,12 @@ async def update_partner(
 
 
 @router.delete("/{partner_id}", status_code=204)
-async def delete_partner(partner_id: int, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_partner(
+    partner_id: int,
+    ctx: AccessContext = Depends(get_access_context),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    require_admin(ctx)
     partner = await db.get(Partner, partner_id)
     if partner is None:
         raise HTTPException(status_code=404, detail="Partner not found")

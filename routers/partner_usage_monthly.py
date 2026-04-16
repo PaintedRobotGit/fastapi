@@ -3,6 +3,13 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from access import (
+    AccessContext,
+    effective_partner_id,
+    enforce_partner_scope_id,
+    ensure_partner_usage_monthly_resource,
+    get_access_context,
+)
 from database import get_db
 from models import Partner, PartnerUsageMonthly
 from schemas import PartnerUsageMonthlyCreate, PartnerUsageMonthlyRead, PartnerUsageMonthlyUpdate
@@ -12,10 +19,11 @@ router = APIRouter(prefix="/partner-usage-monthly", tags=["partner-usage-monthly
 
 @router.get("/", response_model=list[PartnerUsageMonthlyRead])
 async def list_partner_usage_monthly(
+    ctx: AccessContext = Depends(get_access_context),
     db: AsyncSession = Depends(get_db),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    partner_id: int | None = Query(None),
+    partner_id: int | None = Query(None, description="Admin only: filter by partner"),
     year: int | None = Query(None, ge=2000, le=2100),
     month: int | None = Query(None, ge=1, le=12),
 ) -> list[PartnerUsageMonthly]:
@@ -24,8 +32,14 @@ async def list_partner_usage_monthly(
         PartnerUsageMonthly.month.desc(),
         PartnerUsageMonthly.partner_id,
     )
-    if partner_id is not None:
-        stmt = stmt.where(PartnerUsageMonthly.partner_id == partner_id)
+    if ctx.is_admin:
+        if partner_id is not None:
+            stmt = stmt.where(PartnerUsageMonthly.partner_id == partner_id)
+    else:
+        ep = await effective_partner_id(db, ctx.user)
+        if ep is None:
+            return []
+        stmt = stmt.where(PartnerUsageMonthly.partner_id == ep)
     if year is not None:
         stmt = stmt.where(PartnerUsageMonthly.year == year)
     if month is not None:
@@ -37,8 +51,11 @@ async def list_partner_usage_monthly(
 
 @router.post("/", response_model=PartnerUsageMonthlyRead, status_code=201)
 async def create_partner_usage_monthly(
-    payload: PartnerUsageMonthlyCreate, db: AsyncSession = Depends(get_db)
+    payload: PartnerUsageMonthlyCreate,
+    ctx: AccessContext = Depends(get_access_context),
+    db: AsyncSession = Depends(get_db),
 ) -> PartnerUsageMonthly:
+    await enforce_partner_scope_id(ctx, db, payload.partner_id)
     if await db.get(Partner, payload.partner_id) is None:
         raise HTTPException(status_code=400, detail="Partner does not exist for partner_id.")
     row = PartnerUsageMonthly(partner_id=payload.partner_id, year=payload.year, month=payload.month)
@@ -55,20 +72,29 @@ async def create_partner_usage_monthly(
 
 
 @router.get("/{row_id}", response_model=PartnerUsageMonthlyRead)
-async def get_partner_usage_monthly_row(row_id: int, db: AsyncSession = Depends(get_db)) -> PartnerUsageMonthly:
+async def get_partner_usage_monthly_row(
+    row_id: int,
+    ctx: AccessContext = Depends(get_access_context),
+    db: AsyncSession = Depends(get_db),
+) -> PartnerUsageMonthly:
     row = await db.get(PartnerUsageMonthly, row_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Partner usage monthly row not found")
+    await ensure_partner_usage_monthly_resource(ctx, db, row)
     return row
 
 
 @router.patch("/{row_id}", response_model=PartnerUsageMonthlyRead)
 async def update_partner_usage_monthly(
-    row_id: int, payload: PartnerUsageMonthlyUpdate, db: AsyncSession = Depends(get_db)
+    row_id: int,
+    payload: PartnerUsageMonthlyUpdate,
+    ctx: AccessContext = Depends(get_access_context),
+    db: AsyncSession = Depends(get_db),
 ) -> PartnerUsageMonthly:
     row = await db.get(PartnerUsageMonthly, row_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Partner usage monthly row not found")
+    await ensure_partner_usage_monthly_resource(ctx, db, row)
     updates = payload.model_dump(exclude_unset=True)
     for field, value in updates.items():
         setattr(row, field, value)
