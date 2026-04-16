@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -8,14 +9,19 @@ from config import settings
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
+def _prepare_password(plain: str) -> str:
+    # bcrypt truncates at 72 bytes; pre-hash with SHA-256 to handle longer passwords safely
+    return hashlib.sha256(plain.encode()).hexdigest()
+
+
 def hash_password(plain: str) -> str:
-    return pwd_context.hash(plain)
+    return pwd_context.hash(_prepare_password(plain))
 
 
 def verify_password(plain: str, hashed: str | None) -> bool:
     if not hashed:
         return False
-    return pwd_context.verify(plain, hashed)
+    return pwd_context.verify(_prepare_password(plain), hashed)
 
 
 def create_access_token(subject_user_id: int) -> str:
