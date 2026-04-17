@@ -120,6 +120,7 @@ class Role(Base):
     name: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
     display_name: Mapped[str | None] = mapped_column(String(100))
     tier: Mapped[str] = mapped_column(String(20), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("99"))
     description: Mapped[str | None] = mapped_column(Text)
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
