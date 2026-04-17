@@ -65,9 +65,9 @@ def _path_is_public(path: str) -> bool:
         return True
     if path.startswith("/industries"):
         return True
-    if path in ("/auth/register", "/auth/login"):
+    if path in ("/auth/register", "/auth/login", "/auth/signup"):
         return True
-    if path.startswith("/auth/oauth"):
+    if path.startswith("/auth/oauth") or path.startswith("/auth/signup"):
         return True
     return False
 

@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -9,18 +10,71 @@ from config import settings
 from database import get_db
 from deps import get_current_user
 from me import build_user_me
-from models import Customer, Partner, User
+from models import Customer, Partner, PartnerTokenBalance, User
 from oauth_providers import verify_apple_identity_token, verify_google_id_token
 from role_utils import resolve_role_id_for_signup
 from schemas import (
     AppleOAuthRequest,
     GoogleOAuthRequest,
+    GoogleSignupRequest,
     LoginRequest,
     RegisterRequest,
+    SignupPartnerInfo,
+    SignupRequest,
+    SignupResponse,
+    SignupUserInfo,
     TokenResponse,
     UserMe,
 )
 from security import create_access_token, hash_password, verify_password
+
+PARTNER_OWNER_ROLE_ID = 3
+TRIAL_PLAN_ID = 1
+
+
+def _slugify(name: str) -> str:
+    slug = name.lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", slug)
+    slug = slug.strip("-")
+    return slug[:100]
+
+
+async def _unique_slug(db: AsyncSession, base: str) -> str:
+    slug = base or "agency"
+    counter = 2
+    while True:
+        existing = await db.execute(select(Partner).where(Partner.slug == slug))
+        if existing.scalars().first() is None:
+            return slug
+        suffix = f"-{counter}"
+        slug = base[: 100 - len(suffix)] + suffix
+        counter += 1
+
+
+async def _create_partner_and_balance(
+    db: AsyncSession, *, name: str, email: str, country: str | None
+) -> Partner:
+    slug = await _unique_slug(db, _slugify(name))
+    partner = Partner(
+        name=name,
+        slug=slug,
+        email=email,
+        plan_id=TRIAL_PLAN_ID,
+        status="trial",
+        trial_ends_at=datetime.now(timezone.utc) + timedelta(days=14),
+        timezone="UTC",
+        country=country,
+    )
+    db.add(partner)
+    await db.flush()
+    balance = PartnerTokenBalance(
+        partner_id=partner.id,
+        billable_period=datetime.now(timezone.utc).date().replace(day=1),
+        included_tokens=500_000,
+        tokens_used=0,
+    )
+    db.add(balance)
+    return partner
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -39,6 +93,82 @@ async def _user_by_email(db: AsyncSession, email: str) -> User | None:
 
 def _issue_token(user_id: int) -> TokenResponse:
     return TokenResponse(access_token=create_access_token(user_id))
+
+
+@router.post("/signup", response_model=SignupResponse, status_code=201)
+async def signup(payload: SignupRequest, db: AsyncSession = Depends(get_db)) -> SignupResponse:
+    if await _user_by_email(db, payload.email.lower().strip()):
+        raise HTTPException(status_code=409, detail="Email already registered.")
+    partner = await _create_partner_and_balance(
+        db, name=payload.agency_name, email=payload.email.lower().strip(), country=payload.country
+    )
+    user = User(
+        email=payload.email.lower().strip(),
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        password_hash=hash_password(payload.password),
+        partner_id=partner.id,
+        role_id=PARTNER_OWNER_ROLE_ID,
+        status="active",
+        auth_provider="email",
+        last_login=datetime.now(timezone.utc),
+    )
+    db.add(user)
+    await db.flush()
+    return SignupResponse(
+        access_token=create_access_token(user.id),
+        email_verified=False,
+        user=SignupUserInfo(id=user.id, email=user.email, first_name=user.first_name, role="partner_owner"),
+        partner=SignupPartnerInfo(id=partner.id, name=partner.name, slug=partner.slug, plan="trial"),
+    )
+
+
+@router.post("/signup/google", response_model=SignupResponse, status_code=201)
+async def signup_google(payload: GoogleSignupRequest, db: AsyncSession = Depends(get_db)) -> SignupResponse:
+    if not settings.google_client_id:
+        raise HTTPException(status_code=503, detail="Google OAuth is not configured (set GOOGLE_CLIENT_ID).")
+    try:
+        info = verify_google_id_token(payload.id_token, settings.google_client_id)
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail="Invalid Google ID token.") from e
+
+    sub = str(info.get("sub") or "")
+    email = (info.get("email") or "").lower().strip() or None
+    if not sub:
+        raise HTTPException(status_code=401, detail="Google token missing subject.")
+    if not email:
+        raise HTTPException(status_code=400, detail="Google did not return an email.")
+
+    if await _user_by_oauth(db, "google", sub):
+        raise HTTPException(status_code=409, detail="A Google account with this identity already exists. Please log in instead.")
+    if await _user_by_email(db, email):
+        raise HTTPException(status_code=409, detail="An account with this email already exists. Please log in with your password.")
+
+    partner = await _create_partner_and_balance(
+        db, name=payload.agency_name, email=email, country=payload.country
+    )
+    user = User(
+        email=email,
+        first_name=info.get("given_name") or None,
+        last_name=info.get("family_name") or None,
+        avatar_url=info.get("picture") or None,
+        auth_provider="google",
+        provider_id=sub,
+        partner_id=partner.id,
+        role_id=PARTNER_OWNER_ROLE_ID,
+        status="active",
+        email_verified_at=datetime.now(timezone.utc) if info.get("email_verified") else None,
+        last_login=datetime.now(timezone.utc),
+    )
+    db.add(user)
+    await db.flush()
+    email_verified = bool(info.get("email_verified"))
+    return SignupResponse(
+        access_token=create_access_token(user.id),
+        email_verified=email_verified,
+        user=SignupUserInfo(id=user.id, email=user.email, first_name=user.first_name, role="partner_owner"),
+        partner=SignupPartnerInfo(id=partner.id, name=partner.name, slug=partner.slug, plan="trial"),
+    )
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)

@@ -302,6 +302,43 @@ class UserMe(BaseModel):
 # --- Auth ---
 
 
+class SignupRequest(BaseModel):
+    email: str = Field(max_length=255)
+    password: str = Field(min_length=8, max_length=512)
+    first_name: str = Field(max_length=100)
+    last_name: str = Field(max_length=100)
+    agency_name: str = Field(max_length=255)
+    country: str | None = None
+
+
+class GoogleSignupRequest(BaseModel):
+    id_token: str = Field(min_length=10)
+    agency_name: str = Field(max_length=255)
+    country: str | None = None
+
+
+class SignupUserInfo(BaseModel):
+    id: int
+    email: str
+    first_name: str | None
+    role: str
+
+
+class SignupPartnerInfo(BaseModel):
+    id: int
+    name: str
+    slug: str | None
+    plan: str
+
+
+class SignupResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    email_verified: bool = False
+    user: SignupUserInfo
+    partner: SignupPartnerInfo
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
