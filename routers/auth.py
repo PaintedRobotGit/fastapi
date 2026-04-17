@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,7 +11,6 @@ from deps import get_current_user
 from me import build_user_me
 from models import Customer, Partner, User
 from oauth_providers import verify_apple_identity_token, verify_google_id_token
-from partner_utils import create_partner_and_balance
 from role_utils import resolve_role_id_for_signup
 from schemas import (
     AppleOAuthRequest,
@@ -19,7 +19,6 @@ from schemas import (
     GoogleSignupRequest,
     LoginRequest,
     RegisterRequest,
-    SignupPartnerInfo,
     SignupRequest,
     SignupResponse,
     SignupUserInfo,

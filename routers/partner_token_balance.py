@@ -56,13 +56,11 @@ async def create_partner_token_balance(
     await enforce_partner_scope_id(ctx, db, payload.partner_id)
     if await db.get(Partner, payload.partner_id) is None:
         raise HTTPException(status_code=400, detail="Partner does not exist for partner_id.")
-    remaining = int(payload.included_tokens) - int(payload.tokens_used)
     row = PartnerTokenBalance(
         partner_id=payload.partner_id,
         billable_period=payload.billable_period,
         included_tokens=payload.included_tokens,
         tokens_used=payload.tokens_used,
-        tokens_remaining=remaining,
     )
     db.add(row)
     try:
@@ -109,12 +107,9 @@ async def update_partner_token_balance(
         raise HTTPException(status_code=404, detail="Partner token balance row not found")
     await ensure_partner_token_balance_resource(ctx, db, row)
     updates = payload.model_dump(exclude_unset=True)
+    updates.pop("tokens_remaining", None)
     for field, value in updates.items():
         setattr(row, field, value)
-    if "tokens_remaining" not in updates and (
-        "included_tokens" in updates or "tokens_used" in updates
-    ):
-        row.tokens_remaining = int(row.included_tokens) - int(row.tokens_used)
     try:
         await db.flush()
     except IntegrityError as e:
