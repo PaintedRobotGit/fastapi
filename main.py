@@ -3,10 +3,12 @@ import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html
 from fastapi.openapi.utils import get_openapi
 from sqlalchemy import text
 
+from config import settings
 from database import AsyncSessionLocal, engine
 from routers import (
     ai_token_usage,
@@ -43,6 +45,14 @@ app = FastAPI(
         "Use **Authorize** in Swagger UI and paste `Bearer <token>` or just the raw JWT."
     ),
     swagger_ui_parameters={"persistAuthorization": True},
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[o.strip() for o in settings.allowed_origins.split(",")],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
