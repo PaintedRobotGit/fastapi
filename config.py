@@ -21,5 +21,8 @@ class Settings(BaseSettings):
     google_client_id: str | None = None
     apple_client_id: str | None = None
 
+    # CORS: comma-separated list of allowed frontend origins.
+    allowed_origins: str = "http://localhost:3000"
+
 
 settings = Settings()
