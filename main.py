@@ -3,6 +3,7 @@ import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
+from fastapi.openapi.docs import get_redoc_html
 from fastapi.openapi.utils import get_openapi
 from sqlalchemy import text
 
@@ -33,6 +34,8 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     lifespan=lifespan,
     title="PaintedRobot API",
+    # Default ReDoc uses `redoc@next` from a CDN, which often yields a blank page; we serve `/redoc` manually below.
+    redoc_url=None,
     description=(
         "JWT (Bearer) protects all routes except: "
         "`GET /`, `GET /health/db`, `GET /plans`, `GET /industries`, "
@@ -101,6 +104,17 @@ app.include_router(permissions.router)
 app.include_router(users.router)
 app.include_router(ai_token_usage.router)
 app.include_router(partner_token_balance.router)
+
+
+@app.get("/redoc", include_in_schema=False)
+async def redoc_html():
+    """Stable ReDoc bundle; the default `redoc@next` CDN URL often fails (blank page)."""
+    return get_redoc_html(
+        openapi_url=app.openapi_url,
+        title=f"{app.title} - ReDoc",
+        redoc_js_url="https://cdn.jsdelivr.net/npm/redoc@2.1.3/bundles/redoc.standalone.js",
+        with_google_fonts=False,
+    )
 
 
 @app.get("/")
