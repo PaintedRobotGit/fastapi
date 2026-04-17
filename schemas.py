@@ -172,6 +172,7 @@ class RoleRead(BaseModel):
 
     id: int
     name: str
+    display_name: str | None = None
     tier: str
     description: str | None = None
     is_default: bool
