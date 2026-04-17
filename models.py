@@ -8,6 +8,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    FetchedValue,
     ForeignKey,
     Index,
     Integer,
@@ -223,7 +224,7 @@ class PartnerTokenBalance(Base):
     billable_period: Mapped[date] = mapped_column(Date, primary_key=True)
     included_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"))
     tokens_used: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"))
-    tokens_remaining: Mapped[int | None] = mapped_column(BigInteger)
+    tokens_remaining: Mapped[int | None] = mapped_column(BigInteger, server_default=FetchedValue())
     cap_warned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cap_reached_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_updated_at: Mapped[datetime] = mapped_column(
