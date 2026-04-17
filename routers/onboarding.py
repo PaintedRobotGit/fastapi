@@ -7,7 +7,7 @@ from database import get_db
 from deps import get_current_user
 from me import build_user_me
 from models import User
-from routers.auth import _create_partner_and_balance
+from partner_utils import create_partner_and_balance
 from schemas import OnboardingCompleteRequest, UserMe
 
 router = APIRouter(prefix="/onboarding", tags=["onboarding"])
@@ -24,7 +24,7 @@ async def complete_onboarding(
     if current.partner_id is not None:
         raise HTTPException(status_code=409, detail="User already belongs to a partner.")
 
-    partner = await _create_partner_and_balance(
+    partner = await create_partner_and_balance(
         db,
         name=payload.agency_name,
         email=current.email,
