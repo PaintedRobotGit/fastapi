@@ -100,15 +100,11 @@ def _issue_token(user_id: int) -> TokenResponse:
 async def signup(payload: SignupRequest, db: AsyncSession = Depends(get_db)) -> SignupResponse:
     if await _user_by_email(db, payload.email.lower().strip()):
         raise HTTPException(status_code=409, detail="Email already registered.")
-    partner = await _create_partner_and_balance(
-        db, name=payload.agency_name, email=payload.email.lower().strip(), country=payload.country
-    )
     user = User(
         email=payload.email.lower().strip(),
         first_name=payload.first_name,
         last_name=payload.last_name,
         password_hash=hash_password(payload.password),
-        partner_id=partner.id,
         role_id=PARTNER_OWNER_ROLE_ID,
         status="active",
         auth_provider="email",
@@ -120,7 +116,7 @@ async def signup(payload: SignupRequest, db: AsyncSession = Depends(get_db)) -> 
         access_token=create_access_token(user.id),
         email_verified=False,
         user=SignupUserInfo(id=user.id, email=user.email, first_name=user.first_name, role="partner_owner"),
-        partner=SignupPartnerInfo(id=partner.id, name=partner.name, slug=partner.slug, plan="trial"),
+        partner=None,
     )
 
 
@@ -140,14 +136,20 @@ async def signup_google(payload: GoogleSignupRequest, db: AsyncSession = Depends
     if not email:
         raise HTTPException(status_code=400, detail="Google did not return an email.")
 
-    if await _user_by_oauth(db, "google", sub):
-        raise HTTPException(status_code=409, detail="A Google account with this identity already exists. Please log in instead.")
-    if await _user_by_email(db, email):
-        raise HTTPException(status_code=409, detail="An account with this email already exists. Please log in with your password.")
+    existing = await _user_by_oauth(db, "google", sub) or await _user_by_email(db, email)
+    if existing:
+        if existing.status != "active":
+            raise HTTPException(status_code=401, detail="Account is not active.")
+        existing.last_login = datetime.now(timezone.utc)
+        await db.flush()
+        return SignupResponse(
+            access_token=create_access_token(existing.id),
+            email_verified=existing.email_verified_at is not None,
+            user=SignupUserInfo(id=existing.id, email=existing.email, first_name=existing.first_name, role="partner_owner"),
+            partner=None,
+        )
 
-    partner = await _create_partner_and_balance(
-        db, name=payload.agency_name, email=email, country=payload.country
-    )
+    email_verified = bool(info.get("email_verified"))
     user = User(
         email=email,
         first_name=info.get("given_name") or None,
@@ -155,20 +157,18 @@ async def signup_google(payload: GoogleSignupRequest, db: AsyncSession = Depends
         avatar_url=info.get("picture") or None,
         auth_provider="google",
         provider_id=sub,
-        partner_id=partner.id,
         role_id=PARTNER_OWNER_ROLE_ID,
         status="active",
-        email_verified_at=datetime.now(timezone.utc) if info.get("email_verified") else None,
+        email_verified_at=datetime.now(timezone.utc) if email_verified else None,
         last_login=datetime.now(timezone.utc),
     )
     db.add(user)
     await db.flush()
-    email_verified = bool(info.get("email_verified"))
     return SignupResponse(
         access_token=create_access_token(user.id),
         email_verified=email_verified,
         user=SignupUserInfo(id=user.id, email=user.email, first_name=user.first_name, role="partner_owner"),
-        partner=SignupPartnerInfo(id=partner.id, name=partner.name, slug=partner.slug, plan="trial"),
+        partner=None,
     )
 
 
@@ -188,20 +188,25 @@ async def signup_apple(payload: AppleSignupRequest, db: AsyncSession = Depends(g
     if not email:
         raise HTTPException(status_code=400, detail="Apple did not include an email; cannot create an account.")
 
-    if await _user_by_oauth(db, "apple", sub):
-        raise HTTPException(status_code=409, detail="An Apple account with this identity already exists. Please log in instead.")
-    if await _user_by_email(db, email):
-        raise HTTPException(status_code=409, detail="An account with this email already exists. Please log in with your password.")
+    existing = await _user_by_oauth(db, "apple", sub) or await _user_by_email(db, email)
+    if existing:
+        if existing.status != "active":
+            raise HTTPException(status_code=401, detail="Account is not active.")
+        existing.last_login = datetime.now(timezone.utc)
+        await db.flush()
+        email_verified = existing.email_verified_at is not None
+        return SignupResponse(
+            access_token=create_access_token(existing.id),
+            email_verified=email_verified,
+            user=SignupUserInfo(id=existing.id, email=existing.email, first_name=existing.first_name, role="partner_owner"),
+            partner=None,
+        )
 
-    partner = await _create_partner_and_balance(
-        db, name=payload.agency_name, email=email, country=payload.country
-    )
     email_verified = bool(claims.get("email_verified", True))
     user = User(
         email=email,
         auth_provider="apple",
         provider_id=sub,
-        partner_id=partner.id,
         role_id=PARTNER_OWNER_ROLE_ID,
         status="active",
         email_verified_at=datetime.now(timezone.utc) if email_verified else None,
@@ -213,7 +218,7 @@ async def signup_apple(payload: AppleSignupRequest, db: AsyncSession = Depends(g
         access_token=create_access_token(user.id),
         email_verified=email_verified,
         user=SignupUserInfo(id=user.id, email=user.email, first_name=user.first_name, role="partner_owner"),
-        partner=SignupPartnerInfo(id=partner.id, name=partner.name, slug=partner.slug, plan="trial"),
+        partner=None,
     )
 
 
@@ -286,6 +291,8 @@ async def oauth_google(payload: GoogleOAuthRequest, db: AsyncSession = Depends(g
         raise HTTPException(status_code=401, detail="Google token missing subject.")
 
     existing = await _user_by_oauth(db, "google", sub)
+    if not existing and email:
+        existing = await _user_by_email(db, email)
     if existing:
         if existing.status != "active":
             raise HTTPException(status_code=401, detail="Account is not active.")
@@ -296,42 +303,22 @@ async def oauth_google(payload: GoogleOAuthRequest, db: AsyncSession = Depends(g
         return _issue_token(existing.id)
 
     if not email:
-        raise HTTPException(
-            status_code=400,
-            detail="Google did not return an email; cannot create an account automatically.",
-        )
-
-    partner_id, customer_id = payload.partner_id, payload.customer_id
-    if partner_id is not None and await db.get(Partner, partner_id) is None:
-        raise HTTPException(status_code=400, detail="Partner does not exist for partner_id.")
-    if customer_id is not None and await db.get(Customer, customer_id) is None:
-        raise HTTPException(status_code=400, detail="Customer does not exist for customer_id.")
-
-    role_id = await resolve_role_id_for_signup(
-        db,
-        partner_id=partner_id,
-        customer_id=customer_id,
-        role_id=payload.role_id,
-    )
-
+        raise HTTPException(status_code=400, detail="Google did not return an email.")
+    email_verified = bool(info.get("email_verified"))
     user = User(
         email=email,
+        first_name=info.get("given_name") or None,
+        last_name=info.get("family_name") or None,
+        avatar_url=info.get("picture") or None,
         auth_provider="google",
         provider_id=sub,
-        partner_id=partner_id,
-        customer_id=customer_id,
-        role_id=role_id,
-        email_verified_at=datetime.now(timezone.utc) if info.get("email_verified") else None,
-        first_name=(info.get("given_name") or None),
-        last_name=(info.get("family_name") or None),
+        role_id=PARTNER_OWNER_ROLE_ID,
+        status="active",
+        email_verified_at=datetime.now(timezone.utc) if email_verified else None,
+        last_login=datetime.now(timezone.utc),
     )
     db.add(user)
-    try:
-        await db.flush()
-    except IntegrityError as e:
-        raise HTTPException(status_code=409, detail="Email already in use.") from e
-    user.last_login = datetime.now(timezone.utc)
-    await db.refresh(user)
+    await db.flush()
     return _issue_token(user.id)
 
 
@@ -353,6 +340,8 @@ async def oauth_apple(payload: AppleOAuthRequest, db: AsyncSession = Depends(get
         raise HTTPException(status_code=401, detail="Apple token missing subject.")
 
     existing = await _user_by_oauth(db, "apple", sub)
+    if not existing and email:
+        existing = await _user_by_email(db, email)
     if existing:
         if existing.status != "active":
             raise HTTPException(status_code=401, detail="Account is not active.")
@@ -363,40 +352,19 @@ async def oauth_apple(payload: AppleOAuthRequest, db: AsyncSession = Depends(get
         return _issue_token(existing.id)
 
     if not email:
-        raise HTTPException(
-            status_code=400,
-            detail="Apple did not include email on this sign-in; use the first sign-in response or link an email.",
-        )
-
-    partner_id, customer_id = payload.partner_id, payload.customer_id
-    if partner_id is not None and await db.get(Partner, partner_id) is None:
-        raise HTTPException(status_code=400, detail="Partner does not exist for partner_id.")
-    if customer_id is not None and await db.get(Customer, customer_id) is None:
-        raise HTTPException(status_code=400, detail="Customer does not exist for customer_id.")
-
-    role_id = await resolve_role_id_for_signup(
-        db,
-        partner_id=partner_id,
-        customer_id=customer_id,
-        role_id=payload.role_id,
-    )
-
+        raise HTTPException(status_code=400, detail="Apple did not include an email on this sign-in.")
+    email_verified = bool(claims.get("email_verified", True))
     user = User(
         email=email,
         auth_provider="apple",
         provider_id=sub,
-        partner_id=partner_id,
-        customer_id=customer_id,
-        role_id=role_id,
-        email_verified_at=datetime.now(timezone.utc) if claims.get("email_verified", True) else None,
+        role_id=PARTNER_OWNER_ROLE_ID,
+        status="active",
+        email_verified_at=datetime.now(timezone.utc) if email_verified else None,
+        last_login=datetime.now(timezone.utc),
     )
     db.add(user)
-    try:
-        await db.flush()
-    except IntegrityError as e:
-        raise HTTPException(status_code=409, detail="Email already in use.") from e
-    user.last_login = datetime.now(timezone.utc)
-    await db.refresh(user)
+    await db.flush()
     return _issue_token(user.id)
 
 

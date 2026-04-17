@@ -15,6 +15,7 @@ from routers import (
     auth,
     customers,
     industries,
+    onboarding,
     partner_token_balance,
     partners,
     permissions,
@@ -105,6 +106,7 @@ def custom_openapi():
 app.openapi = custom_openapi
 
 app.include_router(auth.router)
+app.include_router(onboarding.router)
 app.include_router(plans.router)
 app.include_router(industries.router)
 app.include_router(partners.router)

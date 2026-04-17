@@ -278,6 +278,7 @@ class UserRead(BaseModel):
     token_expires_at: datetime | None
     scope: str | None
     last_login: datetime | None
+    onboarding_completed_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -307,18 +308,17 @@ class SignupRequest(BaseModel):
     password: str = Field(min_length=8, max_length=512)
     first_name: str = Field(max_length=100)
     last_name: str = Field(max_length=100)
-    agency_name: str = Field(max_length=255)
-    country: str | None = None
 
 
 class GoogleSignupRequest(BaseModel):
     id_token: str = Field(min_length=10)
-    agency_name: str = Field(max_length=255)
-    country: str | None = None
 
 
 class AppleSignupRequest(BaseModel):
     identity_token: str = Field(min_length=10)
+
+
+class OnboardingCompleteRequest(BaseModel):
     agency_name: str = Field(max_length=255)
     country: str | None = None
 
@@ -342,7 +342,7 @@ class SignupResponse(BaseModel):
     token_type: str = "bearer"
     email_verified: bool = False
     user: SignupUserInfo
-    partner: SignupPartnerInfo
+    partner: SignupPartnerInfo | None = None
 
 
 class TokenResponse(BaseModel):
