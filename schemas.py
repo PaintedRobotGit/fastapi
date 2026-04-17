@@ -317,6 +317,12 @@ class GoogleSignupRequest(BaseModel):
     country: str | None = None
 
 
+class AppleSignupRequest(BaseModel):
+    identity_token: str = Field(min_length=10)
+    agency_name: str = Field(max_length=255)
+    country: str | None = None
+
+
 class SignupUserInfo(BaseModel):
     id: int
     email: str

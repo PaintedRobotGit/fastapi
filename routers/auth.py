@@ -15,6 +15,7 @@ from oauth_providers import verify_apple_identity_token, verify_google_id_token
 from role_utils import resolve_role_id_for_signup
 from schemas import (
     AppleOAuthRequest,
+    AppleSignupRequest,
     GoogleOAuthRequest,
     GoogleSignupRequest,
     LoginRequest,
@@ -163,6 +164,51 @@ async def signup_google(payload: GoogleSignupRequest, db: AsyncSession = Depends
     db.add(user)
     await db.flush()
     email_verified = bool(info.get("email_verified"))
+    return SignupResponse(
+        access_token=create_access_token(user.id),
+        email_verified=email_verified,
+        user=SignupUserInfo(id=user.id, email=user.email, first_name=user.first_name, role="partner_owner"),
+        partner=SignupPartnerInfo(id=partner.id, name=partner.name, slug=partner.slug, plan="trial"),
+    )
+
+
+@router.post("/signup/apple", response_model=SignupResponse, status_code=201)
+async def signup_apple(payload: AppleSignupRequest, db: AsyncSession = Depends(get_db)) -> SignupResponse:
+    if not settings.apple_client_id:
+        raise HTTPException(status_code=503, detail="Apple OAuth is not configured (set APPLE_CLIENT_ID).")
+    try:
+        claims = verify_apple_identity_token(payload.identity_token, settings.apple_client_id)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid Apple identity token.") from e
+
+    sub = str(claims.get("sub") or "")
+    email = (claims.get("email") or "").lower().strip() or None
+    if not sub:
+        raise HTTPException(status_code=401, detail="Apple token missing subject.")
+    if not email:
+        raise HTTPException(status_code=400, detail="Apple did not include an email; cannot create an account.")
+
+    if await _user_by_oauth(db, "apple", sub):
+        raise HTTPException(status_code=409, detail="An Apple account with this identity already exists. Please log in instead.")
+    if await _user_by_email(db, email):
+        raise HTTPException(status_code=409, detail="An account with this email already exists. Please log in with your password.")
+
+    partner = await _create_partner_and_balance(
+        db, name=payload.agency_name, email=email, country=payload.country
+    )
+    email_verified = bool(claims.get("email_verified", True))
+    user = User(
+        email=email,
+        auth_provider="apple",
+        provider_id=sub,
+        partner_id=partner.id,
+        role_id=PARTNER_OWNER_ROLE_ID,
+        status="active",
+        email_verified_at=datetime.now(timezone.utc) if email_verified else None,
+        last_login=datetime.now(timezone.utc),
+    )
+    db.add(user)
+    await db.flush()
     return SignupResponse(
         access_token=create_access_token(user.id),
         email_verified=email_verified,
