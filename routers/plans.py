@@ -2,17 +2,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from access import AccessContext, get_access_context
 from database import get_db
 from models import Plan
 from schemas import PlanRead
 
-router = APIRouter(prefix="/plans", tags=["plans"])
+router = APIRouter(
+    prefix="/plans",
+    tags=["plans"],
+)
 
 
 @router.get("/", response_model=list[PlanRead])
 async def list_plans(
-    ctx: AccessContext = Depends(get_access_context),
     db: AsyncSession = Depends(get_db),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
@@ -29,7 +30,6 @@ async def list_plans(
 @router.get("/{plan_id}", response_model=PlanRead)
 async def get_plan(
     plan_id: int,
-    ctx: AccessContext = Depends(get_access_context),
     db: AsyncSession = Depends(get_db),
 ) -> Plan:
     row = await db.get(Plan, plan_id)

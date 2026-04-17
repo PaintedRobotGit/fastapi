@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from access import AccessContext, get_access_context
 from database import get_db
 from models import Industry
 from schemas import IndustryRead
@@ -12,7 +11,6 @@ router = APIRouter(prefix="/industries", tags=["industries"])
 
 @router.get("/", response_model=list[IndustryRead])
 async def list_industries(
-    _: AccessContext = Depends(get_access_context),
     db: AsyncSession = Depends(get_db),
     skip: int = Query(0, ge=0),
     limit: int = Query(200, ge=1, le=500),

@@ -29,6 +29,10 @@ async def list_users(
     partner_id: int | None = Query(None, description="Admin only: filter"),
     customer_id: int | None = Query(None, description="Admin only: filter"),
     role_id: int | None = Query(None, description="Admin only: filter"),
+    status: str | None = Query(
+        None,
+        description="Filter by user status (active | invited | suspended | deactivated)",
+    ),
 ) -> list[User]:
     base = await users_scope_statement(ctx, db)
     stmt = base.order_by(User.id)
@@ -39,6 +43,8 @@ async def list_users(
             stmt = stmt.where(User.customer_id == customer_id)
         if role_id is not None:
             stmt = stmt.where(User.role_id == role_id)
+    if status is not None:
+        stmt = stmt.where(User.status == status)
     stmt = stmt.offset(skip).limit(limit)
     result = await db.execute(stmt)
     return list(result.scalars().all())

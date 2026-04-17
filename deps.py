@@ -6,7 +6,11 @@ from database import get_db
 from models import User
 from security import safe_decode_access_token
 
-http_bearer = HTTPBearer(auto_error=False)
+http_bearer = HTTPBearer(
+    auto_error=False,
+    scheme_name="JWT",
+    description="Access token from POST /auth/login or POST /auth/register (Bearer).",
+)
 
 
 async def get_current_user(

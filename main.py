@@ -3,6 +3,7 @@ import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
+from fastapi.openapi.utils import get_openapi
 from sqlalchemy import text
 
 from database import AsyncSessionLocal, engine
@@ -29,7 +30,66 @@ async def lifespan(_: FastAPI):
     await engine.dispose()
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    lifespan=lifespan,
+    title="PaintedRobot API",
+    description=(
+        "JWT (Bearer) protects all routes except: "
+        "`GET /`, `GET /health/db`, `GET /plans`, `GET /industries`, "
+        "and `POST /auth/register`, `/auth/login`, `/auth/oauth/google`, `/auth/oauth/apple`. "
+        "Use **Authorize** in Swagger UI and paste `Bearer <token>` or just the raw JWT."
+    ),
+    swagger_ui_parameters={"persistAuthorization": True},
+)
+
+
+def _path_is_public(path: str) -> bool:
+    if path in ("/", "/health/db"):
+        return True
+    if path.startswith("/openapi") or path.startswith("/docs") or path.startswith("/redoc"):
+        return True
+    if path.startswith("/plans"):
+        return True
+    if path.startswith("/industries"):
+        return True
+    if path in ("/auth/register", "/auth/login"):
+        return True
+    if path.startswith("/auth/oauth"):
+        return True
+    return False
+
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=getattr(app, "version", "0.1.0"),
+        openapi_version=app.openapi_version,
+        description=app.description,
+        routes=app.routes,
+    )
+    openapi_schema.setdefault("components", {}).setdefault("securitySchemes", {})["JWT"] = {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT from `/auth/login`, `/auth/register`, or OAuth endpoints.",
+    }
+    for path, path_item in openapi_schema.get("paths", {}).items():
+        is_public = _path_is_public(path)
+        for method in ("get", "post", "put", "patch", "delete", "head", "options"):
+            op = path_item.get(method)
+            if not op:
+                continue
+            if is_public:
+                op.pop("security", None)
+            else:
+                op["security"] = [{"JWT": []}]
+    app.openapi_schema = openapi_schema
+    return openapi_schema
+
+
+app.openapi = custom_openapi
 
 app.include_router(auth.router)
 app.include_router(plans.router)

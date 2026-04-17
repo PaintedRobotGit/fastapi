@@ -80,6 +80,9 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> To
     user = await _user_by_email(db, payload.email.lower().strip())
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid email or password.")
+    if user.status != "active":
+        # Same message as wrong password to avoid account enumeration (matches get_current_user behavior).
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
     if user.password_hash is None:
         raise HTTPException(status_code=401, detail="This account uses sign-in with Google or Apple.")
     if not verify_password(payload.password, user.password_hash):
@@ -108,6 +111,8 @@ async def oauth_google(payload: GoogleOAuthRequest, db: AsyncSession = Depends(g
 
     existing = await _user_by_oauth(db, "google", sub)
     if existing:
+        if existing.status != "active":
+            raise HTTPException(status_code=401, detail="Account is not active.")
         existing.last_login = datetime.now(timezone.utc)
         if email and existing.email != email:
             existing.email = email
@@ -173,6 +178,8 @@ async def oauth_apple(payload: AppleOAuthRequest, db: AsyncSession = Depends(get
 
     existing = await _user_by_oauth(db, "apple", sub)
     if existing:
+        if existing.status != "active":
+            raise HTTPException(status_code=401, detail="Account is not active.")
         existing.last_login = datetime.now(timezone.utc)
         if email and existing.email != email:
             existing.email = email

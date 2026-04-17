@@ -44,6 +44,11 @@ async def list_customers(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     partner_id: int | None = Query(None, description="Admin only: filter by partner id"),
+    status: str | None = Query(None, description="Filter by customer status"),
+    omit_archived: bool = Query(
+        True,
+        description="Exclude customers with archived_at set (not applied when listing only your own row).",
+    ),
 ) -> list[Customer]:
     stmt = select(Customer).order_by(Customer.id)
     if ctx.is_admin:
@@ -58,6 +63,10 @@ async def list_customers(
         if ctx.user.customer_id is None:
             return []
         stmt = stmt.where(Customer.id == ctx.user.customer_id)
+    if status is not None:
+        stmt = stmt.where(Customer.status == status)
+    if omit_archived and ctx.tier != "customer":
+        stmt = stmt.where(Customer.archived_at.is_(None))
     stmt = stmt.offset(skip).limit(limit)
     result = await db.execute(stmt)
     return list(result.scalars().all())

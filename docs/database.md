@@ -2,7 +2,9 @@
 
 Marketing management SaaS. Partners are agencies that purchase the platform; Customers are client accounts belonging to a Partner. Users belong to either a Partner or a Customer — or neither (admin-tier users). All timestamps stored in UTC as `TIMESTAMPTZ`.
 
-**Database:** PostgreSQL (Railway)
+**Database:** PostgreSQL (Railway)  
+**Extensions:** `citext`, `pgcrypto`, `pg_trgm`  
+**Triggers:** `set_updated_at()` fires `BEFORE UPDATE` on `partners`, `customers`, `users`, `plans`
 
 ---
 
@@ -70,7 +72,8 @@ Agency accounts that purchase and manage the platform.
 | `created_at` | `timestamptz` | NO | `now()` | |
 | `updated_at` | `timestamptz` | NO | `now()` | |
 
-**Constraints:** `slug` unique; `partners_status_check` — status IN (trial, active, past_due, canceled, suspended)
+**Constraints:** `slug` unique; `partners_status_check` — status IN (trial, active, past_due, canceled, suspended)  
+**Indexes:** `idx_partners_status` on `status` WHERE `archived_at IS NULL`
 
 ---
 
@@ -89,14 +92,16 @@ Client accounts owned by a Partner.
 | `website_url` | `text` | YES | | |
 | `currency` | `text` | NO | `'USD'` | `USD`, `CAD`, `EUR`, `GBP`, `AUD` |
 | `customer_type` | `text` | YES | | `lead_gen`, `ecommerce`, `hybrid`, `other` |
-| `status` | `text` | NO | `'active'` | `prep`, `active`, `on_hold`, `archived` |
+| `status` | `text` | NO | `'prep'` | `prep`, `active`, `on_hold`, `archived` |
 | `notes` | `text` | YES | | Internal notes |
 | `archived_at` | `timestamptz` | YES | | Set when status = `archived` |
 | `created_at` | `timestamptz` | NO | `now()` | |
 | `updated_at` | `timestamptz` | NO | `now()` | |
 
 **Constraints:** `uq_customer_partner_slug` — `(partner_id, slug)` unique; CHECK on `currency`, `customer_type`, `status`  
-**Indexes:** `idx_customers_partner_id` on `partner_id`
+**Indexes:**
+- `idx_customers_partner_id` on `partner_id`
+- `idx_customers_partner_status` on `(partner_id, status)` WHERE `archived_at IS NULL`
 
 ---
 
@@ -169,12 +174,12 @@ Defines the available roles per tier. Roles are seeded — not user-created.
 ### `permissions`
 Granular permission keys using `resource:action` format.
 
-| Column | Type | Nullable | Notes |
-|--------|------|----------|-------|
-| `id` | `serial` | NO | PK |
-| `key` | `varchar(100)` | NO | Unique. e.g. `partner_customers:create` |
-| `description` | `text` | YES | |
-| `created_at` | `timestamptz` | NO | |
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| `id` | `serial` | NO | auto-increment | PK |
+| `key` | `varchar(100)` | NO | | Unique. e.g. `partner_customers:create` |
+| `description` | `text` | YES | | |
+| `created_at` | `timestamptz` | NO | `now()` | |
 
 **Permission keys by scope:**
 
@@ -228,12 +233,14 @@ Per-request AI API usage log. Used for auditing, billing dispute resolution, and
 | `provider_request_id` | `text` | YES | | Request ID returned by the AI provider |
 | `estimated_cost_cents` | `integer` | YES | | Cost estimate in cents |
 | `billable_period` | `date` | NO | first of current month | Truncated to month for aggregation |
+| `user_id` | `integer` | YES | | FK → `users.id` ON DELETE SET NULL — which user triggered the call |
 | `created_at` | `timestamptz` | NO | `now()` | |
 
 **Indexes:**
 - `idx_ai_token_usage_partner_period` on `(partner_id, billable_period)`
 - `idx_ai_token_usage_customer` on `(customer_id, created_at DESC)`
 - `idx_ai_token_usage_feature` on `(feature, created_at DESC)`
+- `idx_ai_token_usage_user` on `(user_id, created_at DESC)`
 
 ---
 
@@ -280,6 +287,9 @@ customers
 roles
   └── users                  (role_id → roles.id)
   └── role_permissions       (role_id → roles.id)
+
+users
+  └── ai_token_usage         (user_id → users.id)
 
 permissions
   └── role_permissions       (permission_id → permissions.id)

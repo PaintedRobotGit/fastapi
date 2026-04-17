@@ -46,7 +46,11 @@ class PartnerCreate(BaseModel):
     slug: str | None = Field(default=None, max_length=100)
     plan_id: int
     timezone: str = Field(default="UTC", max_length=100)
-    status: str = Field(default="active", max_length=50)
+    status: str = Field(
+        default="active",
+        max_length=50,
+        description="trial | active | past_due | canceled | suspended",
+    )
     trial_ends_at: datetime | None = None
     subscription_expires_at: datetime | None = None
     country: str | None = None
@@ -60,7 +64,11 @@ class PartnerUpdate(BaseModel):
     slug: str | None = Field(default=None, max_length=100)
     plan_id: int | None = None
     timezone: str | None = Field(default=None, max_length=100)
-    status: str | None = Field(default=None, max_length=50)
+    status: str | None = Field(
+        default=None,
+        max_length=50,
+        description="trial | active | past_due | canceled | suspended",
+    )
     trial_ends_at: datetime | None = None
     subscription_expires_at: datetime | None = None
     country: str | None = None
@@ -103,7 +111,11 @@ class CustomerCreate(BaseModel):
     website_url: str | None = None
     currency: str = Field(default="USD", max_length=16)
     customer_type: str | None = Field(default=None, max_length=32)
-    status: str = Field(default="active", max_length=32)
+    status: str = Field(
+        default="prep",
+        max_length=32,
+        description="prep | active | on_hold | archived",
+    )
     notes: str | None = None
     archived_at: datetime | None = None
 
@@ -118,7 +130,11 @@ class CustomerUpdate(BaseModel):
     website_url: str | None = None
     currency: str | None = Field(default=None, max_length=16)
     customer_type: str | None = Field(default=None, max_length=32)
-    status: str | None = Field(default=None, max_length=32)
+    status: str | None = Field(
+        default=None,
+        max_length=32,
+        description="prep | active | on_hold | archived",
+    )
     notes: str | None = None
     archived_at: datetime | None = None
 
@@ -171,6 +187,10 @@ class PermissionRead(BaseModel):
     created_at: datetime
 
 
+class RolePermissionAttach(BaseModel):
+    permission_id: int
+
+
 # --- Users ---
 
 
@@ -182,7 +202,11 @@ class UserCreate(BaseModel):
     last_name: str | None = Field(default=None, max_length=100)
     avatar_url: str | None = Field(default=None, max_length=512)
     role_id: int
-    status: str = Field(default="active", max_length=32)
+    status: str = Field(
+        default="active",
+        max_length=32,
+        description="active | invited | suspended | deactivated",
+    )
     email_verified_at: datetime | None = None
     mfa_enabled: bool = False
     mfa_secret: str | None = None
@@ -212,7 +236,11 @@ class UserUpdate(BaseModel):
     last_name: str | None = Field(default=None, max_length=100)
     avatar_url: str | None = Field(default=None, max_length=512)
     role_id: int | None = None
-    status: str | None = Field(default=None, max_length=32)
+    status: str | None = Field(
+        default=None,
+        max_length=32,
+        description="active | invited | suspended | deactivated",
+    )
     email_verified_at: datetime | None = None
     mfa_enabled: bool | None = None
     mfa_secret: str | None = None
@@ -363,6 +391,10 @@ class AiTokenUsageCreate(BaseModel):
         default=None,
         description="First day of the billing month; defaults to the first day of the current UTC month.",
     )
+    user_id: int | None = Field(
+        default=None,
+        description="User who triggered the AI call (must belong to the same partner org as partner_id).",
+    )
 
 
 class AiTokenUsageRead(BaseModel):
@@ -382,6 +414,7 @@ class AiTokenUsageRead(BaseModel):
     provider_request_id: str | None
     estimated_cost_cents: int | None
     billable_period: date
+    user_id: int | None
     created_at: datetime
 
 

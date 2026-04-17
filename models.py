@@ -12,7 +12,6 @@ from sqlalchemy import (
     Index,
     Integer,
     Numeric,
-    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -55,10 +54,15 @@ class Industry(Base):
 class Partner(Base):
     __tablename__ = "partners"
 
+    __table_args__ = (
+        Index("idx_partners_status", "status", postgresql_where=text("archived_at IS NULL")),
+    )
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str | None] = mapped_column(String(255))
     slug: Mapped[str | None] = mapped_column(String(100), unique=True)
+    # Doc mentions ON DELETE SET NULL but plan_id is NOT NULL; RESTRICT matches a safe Postgres shape.
     plan_id: Mapped[int] = mapped_column(Integer, ForeignKey("plans.id", ondelete="RESTRICT"), nullable=False)
     timezone: Mapped[str] = mapped_column(String(100), nullable=False, server_default="UTC")
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'active'"))
@@ -76,11 +80,20 @@ class Partner(Base):
 class Customer(Base):
     __tablename__ = "customers"
 
-    __table_args__ = (UniqueConstraint("partner_id", "slug", name="uq_customer_partner_slug"),)
+    __table_args__ = (
+        UniqueConstraint("partner_id", "slug", name="uq_customer_partner_slug"),
+        Index("idx_customers_partner_id", "partner_id"),
+        Index(
+            "idx_customers_partner_status",
+            "partner_id",
+            "status",
+            postgresql_where=text("archived_at IS NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     partner_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("partners.id", ondelete="CASCADE"), nullable=False, index=True
+        Integer, ForeignKey("partners.id", ondelete="CASCADE"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(Text, nullable=False)
@@ -90,7 +103,7 @@ class Customer(Base):
     website_url: Mapped[str | None] = mapped_column(Text)
     currency: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'USD'"))
     customer_type: Mapped[str | None] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'active'"))
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'prep'"))
     notes: Mapped[str | None] = mapped_column(Text)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
@@ -140,6 +153,7 @@ class User(Base):
     first_name: Mapped[str | None] = mapped_column(String(100))
     last_name: Mapped[str | None] = mapped_column(String(100))
     avatar_url: Mapped[str | None] = mapped_column(String(512))
+    # Doc mentions ON DELETE SET NULL for role_id but column is NOT NULL; RESTRICT is coherent.
     role_id: Mapped[int] = mapped_column(Integer, ForeignKey("roles.id", ondelete="RESTRICT"), nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'active'"))
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -168,6 +182,7 @@ class AiTokenUsage(Base):
         Index("idx_ai_token_usage_partner_period", "partner_id", "billable_period"),
         Index("idx_ai_token_usage_customer", "customer_id", "created_at"),
         Index("idx_ai_token_usage_feature", "feature", "created_at"),
+        Index("idx_ai_token_usage_user", "user_id", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -184,6 +199,7 @@ class AiTokenUsage(Base):
     provider_request_id: Mapped[str | None] = mapped_column(Text)
     estimated_cost_cents: Mapped[int | None] = mapped_column(Integer)
     billable_period: Mapped[date] = mapped_column(Date, nullable=False)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 

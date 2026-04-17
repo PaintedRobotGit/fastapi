@@ -23,16 +23,29 @@ async def list_partners(
     db: AsyncSession = Depends(get_db),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
+    status: str | None = Query(None, description="Filter by partner status"),
+    omit_archived: bool = Query(
+        True,
+        description="Exclude partners with archived_at set (admin only; always shown for own org).",
+    ),
 ) -> list[Partner]:
     if ctx.is_admin:
-        result = await db.execute(select(Partner).order_by(Partner.id).offset(skip).limit(limit))
+        stmt = select(Partner).order_by(Partner.id)
+        if status is not None:
+            stmt = stmt.where(Partner.status == status)
+        if omit_archived:
+            stmt = stmt.where(Partner.archived_at.is_(None))
+        stmt = stmt.offset(skip).limit(limit)
+        result = await db.execute(stmt)
         return list(result.scalars().all())
     ep = await effective_partner_id(db, ctx.user)
     if ep is None:
         return []
-    result = await db.execute(
-        select(Partner).where(Partner.id == ep).offset(skip).limit(limit)
-    )
+    stmt = select(Partner).where(Partner.id == ep)
+    if status is not None:
+        stmt = stmt.where(Partner.status == status)
+    stmt = stmt.offset(skip).limit(limit)
+    result = await db.execute(stmt)
     return list(result.scalars().all())
 
 

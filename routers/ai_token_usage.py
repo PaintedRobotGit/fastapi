@@ -13,7 +13,7 @@ from access import (
     get_access_context,
 )
 from database import get_db
-from models import AiTokenUsage, Customer, Partner
+from models import AiTokenUsage, Customer, Partner, User
 from schemas import AiTokenUsageCreate, AiTokenUsageRead
 
 router = APIRouter(prefix="/ai-token-usage", tags=["ai-token-usage"])
@@ -24,6 +24,32 @@ def _default_billable_period() -> date:
     return date(now.year, now.month, 1)
 
 
+async def _validate_usage_user(
+    db: AsyncSession,
+    *,
+    partner_id: int,
+    customer_id: int | None,
+    user_id: int | None,
+) -> None:
+    if user_id is None:
+        return
+    u = await db.get(User, user_id)
+    if u is None:
+        raise HTTPException(status_code=400, detail="user_id does not exist.")
+    ep = await effective_partner_id(db, u)
+    if ep != partner_id:
+        raise HTTPException(
+            status_code=400,
+            detail="user_id must belong to the same partner organization as partner_id.",
+        )
+    if customer_id is not None and u.partner_id is None:
+        if u.customer_id != customer_id:
+            raise HTTPException(
+                status_code=400,
+                detail="user_id must match the row's customer when logging customer-scoped usage.",
+            )
+
+
 @router.get("/", response_model=list[AiTokenUsageRead])
 async def list_ai_token_usage(
     ctx: AccessContext = Depends(get_access_context),
@@ -32,6 +58,10 @@ async def list_ai_token_usage(
     limit: int = Query(100, ge=1, le=500),
     partner_id: int | None = Query(None, description="Admin only: filter by partner"),
     customer_id: int | None = Query(None, description="Admin only: filter by customer"),
+    user_id: int | None = Query(None, description="Filter by triggering user"),
+    billable_period: date | None = Query(
+        None, description="Filter by billing month (first day of month)"
+    ),
     created_after: datetime | None = Query(None),
     created_before: datetime | None = Query(None),
 ) -> list[AiTokenUsage]:
@@ -41,11 +71,22 @@ async def list_ai_token_usage(
             stmt = stmt.where(AiTokenUsage.partner_id == partner_id)
         if customer_id is not None:
             stmt = stmt.where(AiTokenUsage.customer_id == customer_id)
+        if user_id is not None:
+            stmt = stmt.where(AiTokenUsage.user_id == user_id)
+        if billable_period is not None:
+            stmt = stmt.where(AiTokenUsage.billable_period == billable_period)
     elif ctx.tier == "partner":
         ep = await effective_partner_id(db, ctx.user)
         if ep is None:
             return []
         stmt = stmt.where(AiTokenUsage.partner_id == ep)
+        if user_id is not None:
+            target = await db.get(User, user_id)
+            if target is None or await effective_partner_id(db, target) != ep:
+                return []
+            stmt = stmt.where(AiTokenUsage.user_id == user_id)
+        if billable_period is not None:
+            stmt = stmt.where(AiTokenUsage.billable_period == billable_period)
     else:
         ep = await effective_partner_id(db, ctx.user)
         if ctx.user.customer_id is None or ep is None:
@@ -54,6 +95,12 @@ async def list_ai_token_usage(
             AiTokenUsage.partner_id == ep,
             AiTokenUsage.customer_id == ctx.user.customer_id,
         )
+        if user_id is not None and user_id != ctx.user.id:
+            return []
+        if user_id is not None:
+            stmt = stmt.where(AiTokenUsage.user_id == user_id)
+        if billable_period is not None:
+            stmt = stmt.where(AiTokenUsage.billable_period == billable_period)
     if created_after is not None:
         stmt = stmt.where(AiTokenUsage.created_at >= created_after)
     if created_before is not None:
@@ -93,6 +140,12 @@ async def create_ai_token_usage(
             raise HTTPException(status_code=400, detail="Customer does not exist for customer_id.")
         if cust.partner_id != payload.partner_id:
             raise HTTPException(status_code=400, detail="customer_id does not belong to partner_id.")
+    await _validate_usage_user(
+        db,
+        partner_id=payload.partner_id,
+        customer_id=payload.customer_id,
+        user_id=payload.user_id,
+    )
     total = payload.total_tokens
     if total is None:
         total = (
@@ -116,6 +169,7 @@ async def create_ai_token_usage(
         provider_request_id=payload.provider_request_id,
         estimated_cost_cents=payload.estimated_cost_cents,
         billable_period=billable_period,
+        user_id=payload.user_id,
     )
     db.add(row)
     try:
