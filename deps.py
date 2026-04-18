@@ -1,5 +1,6 @@
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -26,6 +27,8 @@ async def get_current_user(
         user_id = int(payload["sub"])
     except (TypeError, ValueError) as e:
         raise HTTPException(status_code=401, detail="Invalid token subject") from e
+    # Set user_id before querying — RLS on users requires current_user_id to allow self-lookup
+    await db.execute(text("SELECT set_config('app.current_user_id', :uid, true)"), {"uid": str(user_id)})
     user = await db.get(User, user_id)
     if user is None or user.status != "active":
         raise HTTPException(status_code=401, detail="User not found or inactive")

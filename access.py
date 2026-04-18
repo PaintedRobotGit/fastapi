@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from fastapi import Depends, HTTPException
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -34,7 +34,21 @@ async def get_access_context(
     role = await db.get(Role, current.role_id)
     if role is None:
         raise HTTPException(status_code=403, detail="User role not found.")
-    return AccessContext(user=current, role=role)
+    ctx = AccessContext(user=current, role=role)
+    await db.execute(
+        text("""
+            SELECT
+                set_config('app.bypass_rls',          :bypass,      true),
+                set_config('app.current_partner_id',  :partner_id,  true),
+                set_config('app.current_customer_id', :customer_id, true)
+        """),
+        {
+            "bypass":      "true" if ctx.is_admin else "false",
+            "partner_id":  str(current.partner_id or ""),
+            "customer_id": str(current.customer_id or ""),
+        },
+    )
+    return ctx
 
 
 async def effective_partner_id(db: AsyncSession, user: User) -> int | None:
