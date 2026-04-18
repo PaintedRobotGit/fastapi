@@ -2,6 +2,7 @@ from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,7 +14,7 @@ from access import (
     get_access_context,
 )
 from database import get_db
-from models import AiTokenUsage, Customer, Partner, User
+from models import AiTokenUsage, Customer, Partner, PartnerTokenBalance, Plan, User
 from schemas import AiTokenUsageCreate, AiTokenUsageRead
 
 router = APIRouter(prefix="/ai-token-usage", tags=["ai-token-usage"])
@@ -168,4 +169,29 @@ async def create_ai_token_usage(
     except IntegrityError as e:
         raise HTTPException(status_code=409, detail="Could not create AI token usage row.") from e
     await db.refresh(row)
+
+    # Upsert partner_token_balance — increment tokens_used for this period.
+    # On first log for a period, seed included_tokens from the partner's plan.
+    tokens_consumed = row.total_tokens or (
+        payload.input_tokens + payload.output_tokens
+        + payload.cache_read_tokens + payload.cache_write_tokens
+    )
+    partner = await db.get(Partner, payload.partner_id)
+    plan = await db.get(Plan, partner.plan_id) if partner else None
+    included = plan.monthly_token_limit if (plan and plan.monthly_token_limit is not None) else 0
+
+    stmt = pg_insert(PartnerTokenBalance).values(
+        partner_id=payload.partner_id,
+        billable_period=billable_period,
+        included_tokens=included,
+        tokens_used=tokens_consumed,
+    ).on_conflict_do_update(
+        index_elements=["partner_id", "billable_period"],
+        set_={
+            "tokens_used": PartnerTokenBalance.tokens_used + tokens_consumed,
+            "last_updated_at": datetime.now(timezone.utc),
+        },
+    )
+    await db.execute(stmt)
+
     return row
