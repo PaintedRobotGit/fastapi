@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from database import get_db
+from access import AccessContext, get_access_context
 from deps import get_current_user
 from me import build_user_me
 from models import Customer, Partner, User
@@ -321,5 +322,5 @@ async def oauth_apple(payload: AppleOAuthRequest, db: AsyncSession = Depends(get
 
 
 @router.get("/me", response_model=UserMe)
-async def auth_me(current: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> UserMe:
-    return await build_user_me(db, current)
+async def auth_me(ctx: AccessContext = Depends(get_access_context), db: AsyncSession = Depends(get_db)) -> UserMe:
+    return await build_user_me(db, ctx.user)

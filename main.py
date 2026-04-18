@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import sys
 from contextlib import asynccontextmanager
 
@@ -27,6 +28,11 @@ from routers import (
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+if settings.jwt_secret == "dev-only-change-me":
+    logging.getLogger(__name__).critical(
+        "JWT_SECRET is using the insecure default value. Set JWT_SECRET in your environment before deploying."
+    )
 
 
 @asynccontextmanager

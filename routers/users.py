@@ -52,10 +52,10 @@ async def list_users(
 
 @router.get("/me", response_model=UserMe)
 async def read_me(
-    current: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    ctx: AccessContext = Depends(get_access_context), db: AsyncSession = Depends(get_db)
 ) -> UserMe:
     """Same payload as `GET /auth/me` — requires JWT."""
-    return await build_user_me(db, current)
+    return await build_user_me(db, ctx.user)
 
 
 @router.get("/{user_id}", response_model=UserRead)
