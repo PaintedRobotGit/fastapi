@@ -94,6 +94,7 @@ Client accounts owned by a Partner.
 | `customer_type` | `text` | YES | | `lead_gen`, `ecommerce`, `hybrid`, `other` |
 | `status` | `text` | NO | `'prep'` | `prep`, `active`, `on_hold`, `archived` |
 | `notes` | `text` | YES | | Internal notes |
+| `colour` | `text` | YES | | Hex colour code e.g. `#FF5733` — partner-assigned for UI organisation |
 | `archived_at` | `timestamptz` | YES | | Set when status = `archived` |
 | `created_at` | `timestamptz` | NO | `now()` | |
 | `updated_at` | `timestamptz` | NO | `now()` | |
@@ -122,6 +123,7 @@ Individuals who log in. Must belong to at most one Partner or one Customer. Admi
 | `email_verified_at` | `timestamptz` | YES | | NULL = not yet verified |
 | `mfa_enabled` | `boolean` | NO | `false` | |
 | `mfa_secret` | `text` | YES | | TOTP secret; null until MFA enrolled |
+| `onboarding_completed_at` | `timestamptz` | YES | | NULL = onboarding not yet completed |
 | `partner_id` | `integer` | YES | | FK → `partners.id` ON DELETE SET NULL — mutually exclusive with `customer_id` |
 | `customer_id` | `integer` | YES | | FK → `customers.id` ON DELETE SET NULL — mutually exclusive with `partner_id` |
 | `auth_provider` | `varchar(50)` | YES | | `'google'`, `'apple'`, or null for email login |
@@ -151,9 +153,11 @@ Defines the available roles per tier. Roles are seeded — not user-created.
 |--------|------|----------|---------|-------|
 | `id` | `serial` | NO | auto-increment | PK |
 | `name` | `varchar(50)` | NO | | Unique. e.g. `partner_owner` |
+| `display_name` | `varchar(100)` | YES | | Human-readable label for UI |
 | `tier` | `varchar(20)` | NO | | `admin`, `partner`, or `customer` |
 | `description` | `text` | YES | | |
 | `is_default` | `boolean` | NO | `false` | Default role assigned for that tier on signup |
+| `sort_order` | `integer` | NO | `99` | Display order |
 | `created_at` | `timestamptz` | NO | `now()` | |
 
 **Seeded roles:**

@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+import re
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 # --- Plans ---
@@ -117,7 +119,15 @@ class CustomerCreate(BaseModel):
         description="prep | active | on_hold | archived",
     )
     notes: str | None = None
+    colour: str | None = Field(default=None, description="Hex colour code e.g. #FF5733")
     archived_at: datetime | None = None
+
+    @field_validator("colour")
+    @classmethod
+    def validate_colour(cls, v: str | None) -> str | None:
+        if v is not None and not re.fullmatch(r"#[0-9A-Fa-f]{6}", v):
+            raise ValueError("colour must be a 6-digit hex code e.g. #FF5733")
+        return v
 
 
 class CustomerUpdate(BaseModel):
@@ -136,7 +146,15 @@ class CustomerUpdate(BaseModel):
         description="prep | active | on_hold | archived",
     )
     notes: str | None = None
+    colour: str | None = Field(default=None, description="Hex colour code e.g. #FF5733")
     archived_at: datetime | None = None
+
+    @field_validator("colour")
+    @classmethod
+    def validate_colour(cls, v: str | None) -> str | None:
+        if v is not None and not re.fullmatch(r"#[0-9A-Fa-f]{6}", v):
+            raise ValueError("colour must be a 6-digit hex code e.g. #FF5733")
+        return v
 
 
 class CustomerRead(BaseModel):
@@ -154,6 +172,7 @@ class CustomerRead(BaseModel):
     customer_type: str | None
     status: str
     notes: str | None
+    colour: str | None
     archived_at: datetime | None
     created_at: datetime
     updated_at: datetime
