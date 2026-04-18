@@ -431,6 +431,71 @@ class AppleOAuthRequest(BaseModel):
         return self
 
 
+# --- Chat ---
+
+
+class ChatSessionCreate(BaseModel):
+    customer_id: int | None = None
+    title: str | None = None
+
+
+class ChatSessionUpdate(BaseModel):
+    title: str | None = None
+    customer_id: int | None = None
+    archived_at: datetime | None = None
+
+
+class ChatSessionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    partner_id: int
+    user_id: int
+    customer_id: int | None
+    title: str | None
+    archived_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ChatMessageCreate(BaseModel):
+    role: str = Field(description="user | assistant | system")
+    content: str
+    model: str | None = None
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, v: str) -> str:
+        if v not in ("user", "assistant", "system"):
+            raise ValueError("role must be user, assistant, or system")
+        return v
+
+
+class ChatMessageRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    session_id: int
+    partner_id: int
+    role: str
+    content: str
+    model: str | None
+    created_at: datetime
+
+
+class ChatSessionShareCreate(BaseModel):
+    shared_with_user_id: int
+
+
+class ChatSessionShareRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    session_id: int
+    shared_with_user_id: int
+    shared_by_user_id: int | None
+    created_at: datetime
+
+
 # --- AI token usage & partner balance ---
 
 

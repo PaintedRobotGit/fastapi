@@ -13,6 +13,7 @@ from database import AsyncSessionLocal, engine
 from routers import (
     ai_token_usage,
     auth,
+    chat,
     customers,
     industries,
     onboarding,
@@ -116,6 +117,7 @@ app.include_router(permissions.router)
 app.include_router(users.router)
 app.include_router(ai_token_usage.router)
 app.include_router(partner_token_balance.router)
+app.include_router(chat.router)
 
 
 @app.get("/redoc", include_in_schema=False)

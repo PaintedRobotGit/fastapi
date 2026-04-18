@@ -269,6 +269,55 @@ Pre-aggregated monthly token balance per partner. Used for fast limit checking b
 
 ---
 
+### `chat_sessions`
+Conversational AI sessions owned by a user. Distinct from AI generation tasks — only interactive chats are stored here.
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| `id` | `serial` | NO | auto-increment | PK |
+| `partner_id` | `integer` | NO | | FK → `partners.id` ON DELETE CASCADE — tenant scope |
+| `user_id` | `integer` | NO | | FK → `users.id` ON DELETE CASCADE — owner |
+| `customer_id` | `integer` | YES | | FK → `customers.id` ON DELETE SET NULL — optional client context |
+| `title` | `text` | YES | | User-editable or auto-generated from first message |
+| `archived_at` | `timestamptz` | YES | | Soft delete |
+| `created_at` | `timestamptz` | NO | `now()` | |
+| `updated_at` | `timestamptz` | NO | `now()` | |
+
+**Indexes:** `idx_chat_sessions_user` on `(user_id, updated_at DESC)`, `idx_chat_sessions_partner` on `partner_id`, `idx_chat_sessions_customer` on `customer_id` WHERE `customer_id IS NOT NULL`
+
+---
+
+### `chat_messages`
+Individual turns within a chat session. Role matches the Anthropic/OpenAI message format.
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| `id` | `bigserial` | NO | auto-increment | PK |
+| `session_id` | `integer` | NO | | FK → `chat_sessions.id` ON DELETE CASCADE |
+| `partner_id` | `integer` | NO | | FK → `partners.id` ON DELETE CASCADE — denormalized for access control |
+| `role` | `text` | NO | | `user`, `assistant`, or `system` |
+| `content` | `text` | NO | | Message body |
+| `model` | `text` | YES | | AI model used; null for user/system turns |
+| `created_at` | `timestamptz` | NO | `now()` | |
+
+**Indexes:** `idx_chat_messages_session` on `(session_id, created_at ASC)`
+
+---
+
+### `chat_session_shares`
+Grants specific partner-account users read access to a session they don't own.
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| `session_id` | `integer` | NO | | PK, FK → `chat_sessions.id` ON DELETE CASCADE |
+| `shared_with_user_id` | `integer` | NO | | PK, FK → `users.id` ON DELETE CASCADE |
+| `shared_by_user_id` | `integer` | YES | | FK → `users.id` ON DELETE SET NULL — who granted access |
+| `created_at` | `timestamptz` | NO | `now()` | |
+
+**Indexes:** `idx_chat_session_shares_user` on `shared_with_user_id`
+
+---
+
 ## Relationships
 
 ```
@@ -297,4 +346,12 @@ users
 
 permissions
   └── role_permissions       (permission_id → permissions.id)
+
+users
+  └── chat_sessions          (user_id → users.id)
+  └── chat_session_shares    (shared_with_user_id → users.id)
+
+chat_sessions
+  └── chat_messages          (session_id → chat_sessions.id)
+  └── chat_session_shares    (session_id → chat_sessions.id)
 ```

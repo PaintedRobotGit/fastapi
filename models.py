@@ -180,6 +180,56 @@ class User(Base):
     )
 
 
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
+
+    __table_args__ = (
+        Index("idx_chat_sessions_user", "user_id", "updated_at"),
+        Index("idx_chat_sessions_partner", "partner_id"),
+        Index("idx_chat_sessions_customer", "customer_id", postgresql_where=text("customer_id IS NOT NULL")),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    partner_id: Mapped[int] = mapped_column(Integer, ForeignKey("partners.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    customer_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("customers.id", ondelete="SET NULL"))
+    title: Mapped[str | None] = mapped_column(Text)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    __table_args__ = (
+        Index("idx_chat_messages_session", "session_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(Integer, ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False)
+    partner_id: Mapped[int] = mapped_column(Integer, ForeignKey("partners.id", ondelete="CASCADE"), nullable=False)
+    role: Mapped[str] = mapped_column(Text, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class ChatSessionShare(Base):
+    __tablename__ = "chat_session_shares"
+
+    __table_args__ = (
+        Index("idx_chat_session_shares_user", "shared_with_user_id"),
+    )
+
+    session_id: Mapped[int] = mapped_column(Integer, ForeignKey("chat_sessions.id", ondelete="CASCADE"), primary_key=True)
+    shared_with_user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    shared_by_user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 class AiTokenUsage(Base):
     __tablename__ = "ai_token_usage"
 
