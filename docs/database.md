@@ -4,7 +4,9 @@ Marketing management SaaS. Partners are agencies that purchase the platform; Cus
 
 **Database:** PostgreSQL (Railway)  
 **Extensions:** `citext`, `pgcrypto`, `pg_trgm`  
-**Triggers:** `set_updated_at()` fires `BEFORE UPDATE` on `partners`, `customers`, `users`, `plans`
+**Triggers:** `set_updated_at()` fires `BEFORE UPDATE` on `partners`, `customers`, `users`, `plans`  
+**Row Level Security:** Enabled with `FORCE` on all 8 tenant tables (`partners`, `customers`, `users`, `ai_token_usage`, `partner_token_balance`, `chat_sessions`, `chat_messages`, `chat_session_shares`). Policies use four session variables: `app.bypass_rls`, `app.current_partner_id`, `app.current_customer_id`, `app.current_user_id`. Application connects as `app_user` (non-superuser) so RLS fires. Admin sets `bypass_rls = 'true'`; partner users set partner/user IDs only; customer users set all four.  
+**Application DB role:** `app_user` — used by FastAPI for all queries. `postgres` used for migrations/admin only.
 
 ---
 
@@ -312,9 +314,10 @@ Grants specific partner-account users read access to a session they don't own.
 | `session_id` | `integer` | NO | | PK, FK → `chat_sessions.id` ON DELETE CASCADE |
 | `shared_with_user_id` | `integer` | NO | | PK, FK → `users.id` ON DELETE CASCADE |
 | `shared_by_user_id` | `integer` | YES | | FK → `users.id` ON DELETE SET NULL — who granted access |
+| `partner_id` | `integer` | NO | | FK → `partners.id` ON DELETE CASCADE — denormalized for RLS and query performance |
 | `created_at` | `timestamptz` | NO | `now()` | |
 
-**Indexes:** `idx_chat_session_shares_user` on `shared_with_user_id`
+**Indexes:** `idx_chat_session_shares_user` on `shared_with_user_id`, `idx_chat_session_shares_partner` on `partner_id`
 
 ---
 
