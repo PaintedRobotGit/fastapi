@@ -248,7 +248,7 @@ class AiTokenUsage(Base):
     output_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
     cache_read_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     cache_write_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
-    total_tokens: Mapped[int | None] = mapped_column(Integer)
+    total_tokens: Mapped[int | None] = mapped_column(Integer, server_default=FetchedValue())
     feature: Mapped[str | None] = mapped_column(String(100))
     ai_provider: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'default'"))
     provider_request_id: Mapped[str | None] = mapped_column(Text)

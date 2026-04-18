@@ -146,14 +146,6 @@ async def create_ai_token_usage(
         customer_id=payload.customer_id,
         user_id=payload.user_id,
     )
-    total = payload.total_tokens
-    if total is None:
-        total = (
-            payload.input_tokens
-            + payload.output_tokens
-            + payload.cache_read_tokens
-            + payload.cache_write_tokens
-        )
     billable_period = payload.billable_period or _default_billable_period()
     row = AiTokenUsage(
         partner_id=payload.partner_id,
@@ -163,7 +155,6 @@ async def create_ai_token_usage(
         output_tokens=payload.output_tokens,
         cache_read_tokens=payload.cache_read_tokens,
         cache_write_tokens=payload.cache_write_tokens,
-        total_tokens=total,
         feature=payload.feature,
         ai_provider=payload.ai_provider,
         provider_request_id=payload.provider_request_id,
