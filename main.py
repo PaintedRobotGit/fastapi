@@ -36,10 +36,24 @@ if settings.jwt_secret == "dev-only-change-me":
     )
 
 
+# Build the MCP sub-app ONCE so the same StreamableHTTPSessionManager instance
+# is used by both the lifespan (which starts/stops it) and the mount (which
+# serves requests through it). path="/" puts the streamable HTTP route at the
+# sub-app root, so the public URL is `/mcp/` instead of `/mcp/mcp`.
+mcp_app = mcp.http_app(path="/")
+
+
 @asynccontextmanager
-async def lifespan(_: FastAPI):
-    yield
-    await engine.dispose()
+async def lifespan(app: FastAPI):
+    # FastAPI/Starlette does NOT propagate lifespan events to mounted sub-apps
+    # since Starlette 0.13. We have to forward them manually, otherwise FastMCP's
+    # StreamableHTTPSessionManager never starts and every /mcp request 500s with
+    # "Task group is not initialized".
+    async with mcp_app.lifespan(app):
+        try:
+            yield
+        finally:
+            await engine.dispose()
 
 
 app = FastAPI(
@@ -126,7 +140,7 @@ app.include_router(ai_token_usage.router)
 app.include_router(partner_token_balance.router)
 app.include_router(chat.router)
 
-app.mount("/mcp", MCPAuthMiddleware(mcp.http_app()))
+app.mount("/mcp", MCPAuthMiddleware(mcp_app))
 
 
 @app.get("/redoc", include_in_schema=False)
