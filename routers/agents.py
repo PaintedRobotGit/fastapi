@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from access import AccessContext, effective_partner_id, get_access_context
 from database import get_db
+from mcp_server.tools import TOOL_AGENTS
 from models import AppAgent
 from schemas import AppAgentRead
 
@@ -31,3 +32,15 @@ async def list_agents(
     )
     result = await db.execute(stmt)
     return list(result.scalars().all())
+
+
+@router.get("/tool-manifest", response_model=dict[str, list[str]])
+async def get_tool_manifest(
+    _ctx: AccessContext = Depends(get_access_context),
+) -> dict[str, list[str]]:
+    """
+    Returns which MCP tools each agent key may call.
+    Values are lists of agent keys; "*" means all agents.
+    Nuxt uses this to filter the MCP tool list per active agent.
+    """
+    return TOOL_AGENTS

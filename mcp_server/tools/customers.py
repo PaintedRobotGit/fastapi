@@ -6,7 +6,7 @@ from mcp_server.context import mcp_db_context
 from mcp_server.server import mcp
 
 
-@mcp.tool(description="List all customers visible to the authenticated user.")
+@mcp.tool(description="List all customers visible to the authenticated user.", tags={"agent:general"})
 async def list_customers() -> list[dict]:
     async with mcp_db_context() as (ctx, db):
         stmt = select(Customer).order_by(Customer.name)
@@ -43,7 +43,7 @@ async def list_customers() -> list[dict]:
         ]
 
 
-@mcp.tool(description="Get a single customer by ID.")
+@mcp.tool(description="Get a single customer by ID.", tags={"agent:general"})
 async def get_customer(customer_id: int) -> dict:
     async with mcp_db_context() as (ctx, db):
         customer = await db.get(Customer, customer_id)
