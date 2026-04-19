@@ -11,7 +11,6 @@ from access import (
     validate_user_create_payload,
 )
 from database import get_db
-from deps import get_current_user
 from me import build_user_me
 from models import Customer, Partner, Role, User
 from role_utils import assert_user_scope_db

@@ -8,11 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import settings
 from database import get_db
 from access import AccessContext, get_access_context
-from deps import get_current_user
 from me import build_user_me
 from models import Customer, Partner, User
 from oauth_providers import verify_apple_identity_token, verify_google_id_token
-from role_utils import resolve_role_id_for_signup
+from role_utils import get_role_by_name, resolve_role_id_for_signup
 from schemas import (
     AppleOAuthRequest,
     AppleSignupRequest,
@@ -27,8 +26,6 @@ from schemas import (
     UserMe,
 )
 from security import create_access_token, hash_password, verify_password
-
-PARTNER_OWNER_ROLE_ID = 3
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -49,16 +46,25 @@ def _issue_token(user_id: int) -> TokenResponse:
     return TokenResponse(access_token=create_access_token(user_id))
 
 
+async def _partner_owner_role_id(db: AsyncSession) -> int:
+    """Look up the partner_owner role ID by name rather than assuming a fixed integer."""
+    role = await get_role_by_name(db, "partner_owner")
+    if role is None:
+        raise HTTPException(status_code=503, detail="Role 'partner_owner' is missing; seed the roles table.")
+    return role.id
+
+
 @router.post("/signup", response_model=SignupResponse, status_code=201)
 async def signup(payload: SignupRequest, db: AsyncSession = Depends(get_db)) -> SignupResponse:
     if await _user_by_email(db, payload.email.lower().strip()):
         raise HTTPException(status_code=409, detail="Email already registered.")
+    role_id = await _partner_owner_role_id(db)
     user = User(
         email=payload.email.lower().strip(),
         first_name=payload.first_name,
         last_name=payload.last_name,
         password_hash=hash_password(payload.password),
-        role_id=PARTNER_OWNER_ROLE_ID,
+        role_id=role_id,
         status="active",
         auth_provider="email",
         last_login=datetime.now(timezone.utc),
@@ -103,6 +109,7 @@ async def signup_google(payload: GoogleSignupRequest, db: AsyncSession = Depends
         )
 
     email_verified = bool(info.get("email_verified"))
+    role_id = await _partner_owner_role_id(db)
     user = User(
         email=email,
         first_name=info.get("given_name") or None,
@@ -110,7 +117,7 @@ async def signup_google(payload: GoogleSignupRequest, db: AsyncSession = Depends
         avatar_url=info.get("picture") or None,
         auth_provider="google",
         provider_id=sub,
-        role_id=PARTNER_OWNER_ROLE_ID,
+        role_id=role_id,
         status="active",
         email_verified_at=datetime.now(timezone.utc) if email_verified else None,
         last_login=datetime.now(timezone.utc),
@@ -156,11 +163,12 @@ async def signup_apple(payload: AppleSignupRequest, db: AsyncSession = Depends(g
         )
 
     email_verified = bool(claims.get("email_verified", True))
+    role_id = await _partner_owner_role_id(db)
     user = User(
         email=email,
         auth_provider="apple",
         provider_id=sub,
-        role_id=PARTNER_OWNER_ROLE_ID,
+        role_id=role_id,
         status="active",
         email_verified_at=datetime.now(timezone.utc) if email_verified else None,
         last_login=datetime.now(timezone.utc),
@@ -197,7 +205,6 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
         customer_id=payload.customer_id,
         role_id=role_id,
         auth_provider="email",
-        provider_id=None,
     )
     db.add(user)
     try:
@@ -215,7 +222,6 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> To
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid email or password.")
     if user.status != "active":
-        # Same message as wrong password to avoid account enumeration (matches get_current_user behavior).
         raise HTTPException(status_code=401, detail="Invalid email or password.")
     if user.password_hash is None:
         raise HTTPException(status_code=401, detail="This account uses sign-in with Google or Apple.")
@@ -258,6 +264,7 @@ async def oauth_google(payload: GoogleOAuthRequest, db: AsyncSession = Depends(g
     if not email:
         raise HTTPException(status_code=400, detail="Google did not return an email.")
     email_verified = bool(info.get("email_verified"))
+    role_id = await _partner_owner_role_id(db)
     user = User(
         email=email,
         first_name=info.get("given_name") or None,
@@ -265,7 +272,7 @@ async def oauth_google(payload: GoogleOAuthRequest, db: AsyncSession = Depends(g
         avatar_url=info.get("picture") or None,
         auth_provider="google",
         provider_id=sub,
-        role_id=PARTNER_OWNER_ROLE_ID,
+        role_id=role_id,
         status="active",
         email_verified_at=datetime.now(timezone.utc) if email_verified else None,
         last_login=datetime.now(timezone.utc),
@@ -307,11 +314,12 @@ async def oauth_apple(payload: AppleOAuthRequest, db: AsyncSession = Depends(get
     if not email:
         raise HTTPException(status_code=400, detail="Apple did not include an email on this sign-in.")
     email_verified = bool(claims.get("email_verified", True))
+    role_id = await _partner_owner_role_id(db)
     user = User(
         email=email,
         auth_provider="apple",
         provider_id=sub,
-        role_id=PARTNER_OWNER_ROLE_ID,
+        role_id=role_id,
         status="active",
         email_verified_at=datetime.now(timezone.utc) if email_verified else None,
         last_login=datetime.now(timezone.utc),

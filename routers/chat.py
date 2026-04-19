@@ -251,6 +251,7 @@ async def share_chat_session(
         session_id=session_id,
         shared_with_user_id=payload.shared_with_user_id,
         shared_by_user_id=ctx.user.id,
+        partner_id=session.partner_id,
     )
     db.add(share)
     try:

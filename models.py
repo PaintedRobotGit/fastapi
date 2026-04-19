@@ -222,11 +222,13 @@ class ChatSessionShare(Base):
 
     __table_args__ = (
         Index("idx_chat_session_shares_user", "shared_with_user_id"),
+        Index("idx_chat_session_shares_partner", "partner_id"),
     )
 
     session_id: Mapped[int] = mapped_column(Integer, ForeignKey("chat_sessions.id", ondelete="CASCADE"), primary_key=True)
     shared_with_user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     shared_by_user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    partner_id: Mapped[int] = mapped_column(Integer, ForeignKey("partners.id", ondelete="CASCADE"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 

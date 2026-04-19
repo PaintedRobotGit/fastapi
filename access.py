@@ -5,12 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from fastapi import Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from deps import get_current_user
+from deps import http_bearer
 from models import AiTokenUsage, Customer, PartnerTokenBalance, Role, User
+from security import safe_decode_access_token
 
 
 @dataclass
@@ -27,14 +29,34 @@ class AccessContext:
         return self.role.tier == "admin"
 
 
-async def get_access_context(
-    current: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> AccessContext:
-    role = await db.get(Role, current.role_id)
+async def build_access_context(token: str, db: AsyncSession) -> AccessContext:
+    """Validate JWT, load user + role, configure all RLS session vars, return AccessContext.
+
+    Raises ValueError on any auth failure. Framework-agnostic — callable from FastAPI deps
+    or MCP tools without touching FastAPI's request/response machinery.
+    """
+    payload = safe_decode_access_token(token)
+    if not payload or "sub" not in payload:
+        raise ValueError("Invalid or expired token")
+    try:
+        user_id = int(payload["sub"])
+    except (TypeError, ValueError) as e:
+        raise ValueError("Invalid token subject") from e
+
+    # Set user_id first — RLS on the users table requires it before we can query our own row.
+    await db.execute(
+        text("SELECT set_config('app.current_user_id', :uid, true)"),
+        {"uid": str(user_id)},
+    )
+    user = await db.get(User, user_id)
+    if user is None or user.status != "active":
+        raise ValueError("User not found or inactive")
+
+    role = await db.get(Role, user.role_id)
     if role is None:
-        raise HTTPException(status_code=403, detail="User role not found.")
-    ctx = AccessContext(user=current, role=role)
+        raise ValueError("User role not found")
+
+    ctx = AccessContext(user=user, role=role)
     await db.execute(
         text("""
             SELECT
@@ -44,11 +66,23 @@ async def get_access_context(
         """),
         {
             "bypass":      "true" if ctx.is_admin else "false",
-            "partner_id":  str(current.partner_id or ""),
-            "customer_id": str(current.customer_id or ""),
+            "partner_id":  str(user.partner_id or ""),
+            "customer_id": str(user.customer_id or ""),
         },
     )
     return ctx
+
+
+async def get_access_context(
+    credentials: HTTPAuthorizationCredentials | None = Depends(http_bearer),
+    db: AsyncSession = Depends(get_db),
+) -> AccessContext:
+    if credentials is None or not credentials.credentials:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        return await build_access_context(credentials.credentials, db)
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e))
 
 
 async def effective_partner_id(db: AsyncSession, user: User) -> int | None:

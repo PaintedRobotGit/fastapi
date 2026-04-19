@@ -11,6 +11,7 @@ from sqlalchemy import text
 
 from config import settings
 from database import AsyncSessionLocal, engine
+from mcp_server import MCPAuthMiddleware, mcp
 from routers import (
     ai_token_usage,
     auth,
@@ -124,6 +125,8 @@ app.include_router(users.router)
 app.include_router(ai_token_usage.router)
 app.include_router(partner_token_balance.router)
 app.include_router(chat.router)
+
+app.mount("/mcp", MCPAuthMiddleware(mcp.http_app()))
 
 
 @app.get("/redoc", include_in_schema=False)
