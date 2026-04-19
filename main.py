@@ -13,6 +13,7 @@ from config import settings
 from database import AsyncSessionLocal, engine
 from mcp_server import MCPAuthMiddleware, mcp
 from routers import (
+    agents,
     ai_token_usage,
     auth,
     chat,
@@ -127,6 +128,7 @@ def custom_openapi():
 
 app.openapi = custom_openapi
 
+app.include_router(agents.router)
 app.include_router(auth.router)
 app.include_router(onboarding.router)
 app.include_router(plans.router)

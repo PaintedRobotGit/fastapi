@@ -431,6 +431,21 @@ class AppleOAuthRequest(BaseModel):
         return self
 
 
+# --- App agents ---
+
+
+class AppAgentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    key: str
+    label: str
+    category: str
+    description: str
+    is_default: bool
+    enabled: bool
+    partner_id: int | None
+
+
 # --- Chat ---
 
 
@@ -443,6 +458,7 @@ class ChatSessionUpdate(BaseModel):
     title: str | None = None
     customer_id: int | None = None
     archived_at: datetime | None = None
+    current_agent_key: str | None = None
 
 
 class ChatSessionRead(BaseModel):
@@ -452,6 +468,7 @@ class ChatSessionRead(BaseModel):
     partner_id: int
     user_id: int
     customer_id: int | None
+    current_agent_key: str | None
     title: str | None
     archived_at: datetime | None
     created_at: datetime

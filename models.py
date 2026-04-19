@@ -180,6 +180,28 @@ class User(Base):
     )
 
 
+class AppAgent(Base):
+    __tablename__ = "app_agents"
+
+    __table_args__ = (
+        Index("idx_app_agents_category", "category", postgresql_where=text("enabled = true")),
+        Index("idx_app_agents_partner", "partner_id", postgresql_where=text("enabled = true AND partner_id IS NOT NULL")),
+    )
+
+    key: Mapped[str] = mapped_column(Text, primary_key=True)
+    console_agent_id: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
+    label: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=true())
+    partner_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("partners.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
 class ChatSession(Base):
     __tablename__ = "chat_sessions"
 
@@ -193,6 +215,7 @@ class ChatSession(Base):
     partner_id: Mapped[int] = mapped_column(Integer, ForeignKey("partners.id", ondelete="CASCADE"), nullable=False)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     customer_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("customers.id", ondelete="SET NULL"))
+    current_agent_key: Mapped[str | None] = mapped_column(Text, ForeignKey("app_agents.key", ondelete="SET NULL"))
     title: Mapped[str | None] = mapped_column(Text)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
