@@ -443,6 +443,7 @@ class AppAgentRead(BaseModel):
     description: str
     is_default: bool
     enabled: bool
+    thinking_default: bool
     partner_id: int | None
 
 

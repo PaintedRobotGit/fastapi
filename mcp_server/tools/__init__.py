@@ -16,13 +16,13 @@ from mcp_server.server import mcp
 
 def _build_tool_manifest() -> dict[str, list[str]]:
     manifest: dict[str, list[str]] = {}
-    for tool in mcp._tool_manager.list_tools():
+    for name, tool in mcp._tool_manager.get_tools().items():
         agents = [
             t.removeprefix("agent:")
             for t in (tool.tags or set())
             if t.startswith("agent:")
         ]
-        manifest[tool.name] = agents if agents else ["*"]
+        manifest[name] = agents if agents else ["*"]
     return manifest
 
 

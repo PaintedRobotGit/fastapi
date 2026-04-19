@@ -235,6 +235,7 @@ Registry of available AI agents in the platform. Global agents (`partner_id IS N
 | `partner_id` | `integer` | YES | | FK → `partners.id` ON DELETE CASCADE — NULL = global agent |
 | `created_at` | `timestamptz` | NO | `now()` | |
 | `updated_at` | `timestamptz` | NO | `now()` | |
+| `thinking_default` | `boolean` | NO | `false` | Whether extended thinking is enabled by default for this agent |
 
 **Indexes:**
 - `idx_app_agents_category` on `category` WHERE `enabled = true`
