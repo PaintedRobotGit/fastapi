@@ -10,19 +10,23 @@ Omitting agent tags entirely also means all agents (safe default).
 edit it manually. To assign a tool to an agent, update its decorator.
 """
 
+from fastmcp.tools.base import Tool as FastMCPTool
+
 from mcp_server.tools.customers import get_customer, list_customers  # noqa: F401
 from mcp_server.server import mcp
 
 
 def _build_tool_manifest() -> dict[str, list[str]]:
     manifest: dict[str, list[str]] = {}
-    for name, tool in mcp._tool_manager.get_tools().items():
+    for component in mcp._local_provider._components.values():
+        if not isinstance(component, FastMCPTool):
+            continue
         agents = [
             t.removeprefix("agent:")
-            for t in (tool.tags or set())
+            for t in (component.tags or set())
             if t.startswith("agent:")
         ]
-        manifest[name] = agents if agents else ["*"]
+        manifest[component.name] = agents if agents else ["*"]
     return manifest
 
 
