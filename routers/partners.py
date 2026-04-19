@@ -13,6 +13,7 @@ from access import (
 from database import get_db
 from models import Customer, Partner, Plan
 from schemas import PartnerCreate, PartnerRead, PartnerUpdate, PartnerWithCustomersRead
+from slug_utils import generate_slug
 
 router = APIRouter(prefix="/partners", tags=["partners"])
 
@@ -88,7 +89,8 @@ async def create_partner(
     require_admin(ctx)
     if await db.get(Plan, payload.plan_id) is None:
         raise HTTPException(status_code=400, detail="Invalid plan_id.")
-    partner = Partner(**payload.model_dump())
+    slug = await generate_slug(db, Partner)
+    partner = Partner(**payload.model_dump(), slug=slug)
     db.add(partner)
     try:
         await db.flush()
@@ -115,6 +117,7 @@ async def update_partner(
     if ctx.tier == "customer":
         raise HTTPException(status_code=403, detail="Cannot update partner with this account type.")
     updates = payload.model_dump(exclude_unset=True)
+    updates.pop("slug", None)
     if "plan_id" in updates and await db.get(Plan, updates["plan_id"]) is None:
         raise HTTPException(status_code=400, detail="Invalid plan_id.")
     for field, value in updates.items():

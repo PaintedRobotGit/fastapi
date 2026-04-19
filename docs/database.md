@@ -5,7 +5,7 @@ Marketing management SaaS. Partners are agencies that purchase the platform; Cus
 **Database:** PostgreSQL (Railway)  
 **Extensions:** `citext`, `pgcrypto`, `pg_trgm`  
 **Triggers:** `set_updated_at()` fires `BEFORE UPDATE` on `partners`, `customers`, `users`, `plans`  
-**Row Level Security:** Enabled with `FORCE` on all 8 tenant tables (`partners`, `customers`, `users`, `ai_token_usage`, `partner_token_balance`, `chat_sessions`, `chat_messages`, `chat_session_shares`). Policies use four session variables: `app.bypass_rls`, `app.current_partner_id`, `app.current_customer_id`, `app.current_user_id`. Application connects as `app_user` (non-superuser) so RLS fires. Admin sets `bypass_rls = 'true'`; partner users set partner/user IDs only; customer users set all four.  
+**Row Level Security:** Enabled on all tenant tables. The original 8 core tables (`partners`, `customers`, `users`, `ai_token_usage`, `partner_token_balance`, `chat_sessions`, `chat_messages`, `chat_session_shares`) use `FORCE`. The 9 customer-profile tables (`customer_services`, `customer_service_channels`, `customer_documents`, `brand_voice`, `brand_voice_inputs`, `target_audiences`, `info_base_entries`, `products_and_services`, `customer_contacts`) have RLS enabled without `FORCE`. Policies use four session variables: `app.bypass_rls`, `app.current_partner_id`, `app.current_customer_id`, `app.current_user_id`. Application connects as `app_user` (non-superuser) so RLS fires. Admin sets `bypass_rls = 'true'`; partner users set partner/user IDs only; customer users set all four.  
 **Application DB role:** `app_user` — used by FastAPI for all queries. `postgres` used for migrations/admin only.
 
 ---
@@ -87,7 +87,7 @@ Client accounts owned by a Partner.
 | `id` | `serial` | NO | auto-increment | PK |
 | `partner_id` | `integer` | NO | | FK → `partners.id` ON DELETE CASCADE |
 | `name` | `varchar(255)` | NO | | |
-| `slug` | `text` | NO | | Auto-generated from name; unique per partner |
+| `slug` | `text` | NO | | Auto-generated from name; globally unique |
 | `email` | `varchar(255)` | YES | | Primary contact email |
 | `industry_id` | `integer` | YES | | FK → `industries.id` |
 | `timezone` | `varchar(100)` | NO | `'UTC'` | IANA timezone string |
@@ -101,7 +101,7 @@ Client accounts owned by a Partner.
 | `created_at` | `timestamptz` | NO | `now()` | |
 | `updated_at` | `timestamptz` | NO | `now()` | |
 
-**Constraints:** `uq_customer_partner_slug` — `(partner_id, slug)` unique; CHECK on `currency`, `customer_type`, `status`  
+**Constraints:** `uq_customers_slug` — `slug` unique (global); CHECK on `currency`, `customer_type`, `status`  
 **Indexes:**
 - `idx_customers_partner_id` on `partner_id`
 - `idx_customers_partner_status` on `(partner_id, status)` WHERE `archived_at IS NULL`
@@ -345,44 +345,299 @@ Grants specific partner-account users read access to a session they don't own.
 
 ---
 
+### `customer_services`
+One-row-per-customer record storing agency service scope and high-level notes for each marketing channel delivered to a customer. At most one row per customer (unique on `customer_id`).
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| `id` | `serial` | NO | auto-increment | PK |
+| `partner_id` | `integer` | NO | | FK → `partners.id` ON DELETE CASCADE |
+| `customer_id` | `integer` | NO | | FK → `customers.id` ON DELETE CASCADE — unique |
+| `seo_notes` | `text` | YES | | |
+| `ads_notes` | `text` | YES | | |
+| `social_notes` | `text` | YES | | |
+| `email_notes` | `text` | YES | | |
+| `website_notes` | `text` | YES | | |
+| `creative_notes` | `text` | YES | | |
+| `created_at` | `timestamptz` | NO | `now()` | |
+| `updated_at` | `timestamptz` | NO | `now()` | |
+
+**Constraints:** `customer_services_customer_id_key` — `customer_id` unique  
+**Indexes:** `idx_customer_services_partner` on `partner_id`  
+**RLS policies:** `partner_access` — ALL where `partner_id = app.current_partner_id`
+
+---
+
+### `customer_service_channels`
+Individual delivery channels per service area for a customer. Multiple channels can exist per `(customer_id, service_area)` — e.g. separate Google Ads and Meta Ads entries both under `ads`. Unique per `(customer_id, service_area, channel_label)`.
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| `id` | `serial` | NO | auto-increment | PK |
+| `partner_id` | `integer` | NO | | FK → `partners.id` ON DELETE CASCADE |
+| `customer_id` | `integer` | NO | | FK → `customers.id` ON DELETE CASCADE |
+| `service_area` | `text` | NO | | `seo`, `ads`, `social`, `email`, `website`, `creative`, `reporting`, `analytics` |
+| `channel_label` | `text` | NO | | e.g. `Google Ads`, `Meta`, `Klaviyo` |
+| `is_active` | `boolean` | NO | `true` | |
+| `notes` | `text` | YES | | |
+| `created_at` | `timestamptz` | NO | `now()` | |
+
+**Constraints:** `customer_service_channels_customer_id_service_area_channel__key` — `(customer_id, service_area, channel_label)` unique; CHECK on `service_area`  
+**Indexes:**
+- `idx_customer_service_channels_customer` on `customer_id`
+- `idx_customer_service_channels_partner` on `partner_id`
+
+**RLS policies:** `partner_access` — ALL where `partner_id = app.current_partner_id`
+
+---
+
+### `customer_documents`
+Versioned documents attached to a customer — audits, project docs, reports, and other collateral.
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| `id` | `serial` | NO | auto-increment | PK |
+| `partner_id` | `integer` | NO | | FK → `partners.id` ON DELETE CASCADE |
+| `customer_id` | `integer` | NO | | FK → `customers.id` ON DELETE CASCADE |
+| `document_type` | `text` | NO | | `project_doc`, `audit_context`, `audit_summary`, `report`, `other` |
+| `name` | `text` | NO | | Display name of the document |
+| `version` | `text` | NO | `'1.0'` | |
+| `status` | `text` | NO | `'current'` | `current`, `stale`, `archived` |
+| `content` | `text` | YES | | Body text; format determined by `content_format` |
+| `content_format` | `text` | NO | `'markdown'` | `markdown`, `html`, `plaintext`, `json` |
+| `metadata` | `jsonb` | YES | | Arbitrary structured metadata |
+| `created_by_user_id` | `integer` | YES | | FK → `users.id` ON DELETE SET NULL |
+| `created_at` | `timestamptz` | NO | `now()` | |
+| `updated_at` | `timestamptz` | NO | `now()` | |
+
+**Constraints:** CHECK on `document_type`, `status`, `content_format`  
+**Indexes:**
+- `idx_customer_documents_partner` on `partner_id`
+- `idx_customer_documents_type` on `(customer_id, document_type, status)`
+
+**RLS policies:**
+- `partner_access` — ALL where `partner_id = app.current_partner_id`
+- `customer_read` — SELECT where `customer_id = app.current_customer_id AND partner_id = app.current_partner_id`
+
+---
+
+### `brand_voice`
+One-row-per-customer brand voice profile. Stores tone descriptors, style rules, and example phrases used to guide AI content generation. Unique on `customer_id`.
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| `id` | `serial` | NO | auto-increment | PK |
+| `partner_id` | `integer` | NO | | FK → `partners.id` ON DELETE CASCADE |
+| `customer_id` | `integer` | NO | | FK → `customers.id` ON DELETE CASCADE — unique |
+| `tone_descriptors` | `text[]` | YES | | Array of adjectives e.g. `{friendly, authoritative}` |
+| `voice_detail` | `text` | YES | | Freeform description of brand voice |
+| `dos` | `text[]` | YES | | Writing guidelines — things to do |
+| `donts` | `text[]` | YES | | Writing guidelines — things to avoid |
+| `example_phrases` | `text[]` | YES | | Sample copy that reflects the brand voice |
+| `created_at` | `timestamptz` | NO | `now()` | |
+| `updated_at` | `timestamptz` | NO | `now()` | |
+
+**Constraints:** `brand_voice_customer_id_key` — `customer_id` unique  
+**Indexes:** `idx_brand_voice_partner` on `partner_id`  
+**RLS policies:**
+- `partner_access` — ALL where `partner_id = app.current_partner_id`
+- `customer_read` — SELECT where `customer_id = app.current_customer_id AND partner_id = app.current_partner_id`
+
+---
+
+### `brand_voice_inputs`
+Raw input submissions (copy samples, style notes, etc.) used to build or refine a customer's brand voice profile. Multiple rows per customer.
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| `id` | `serial` | NO | auto-increment | PK |
+| `partner_id` | `integer` | NO | | FK → `partners.id` ON DELETE CASCADE |
+| `customer_id` | `integer` | NO | | FK → `customers.id` ON DELETE CASCADE |
+| `input_type` | `text` | YES | | e.g. `copy_sample`, `style_note`, `competitor_example` |
+| `content` | `text` | NO | | The raw input text |
+| `submitted_by` | `text` | YES | | Free-text attribution (name or role) |
+| `notes` | `text` | YES | | Internal notes on the input |
+| `created_at` | `timestamptz` | NO | `now()` | |
+
+**Indexes:**
+- `idx_brand_voice_inputs_customer` on `customer_id`
+- `idx_brand_voice_inputs_partner` on `partner_id`
+
+**RLS policies:** `partner_access` — ALL where `partner_id = app.current_partner_id`
+
+---
+
+### `target_audiences`
+Defined audience segments for a customer. Multiple rows per customer, ordered by `rank`.
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| `id` | `serial` | NO | auto-increment | PK |
+| `partner_id` | `integer` | NO | | FK → `partners.id` ON DELETE CASCADE |
+| `customer_id` | `integer` | NO | | FK → `customers.id` ON DELETE CASCADE |
+| `name` | `text` | NO | | Audience segment name |
+| `rank` | `integer` | NO | `99` | Display/priority order (lower = higher priority) |
+| `demographics` | `jsonb` | YES | | Structured demographic attributes |
+| `psychographics` | `jsonb` | YES | | Structured psychographic attributes |
+| `buyer_stage` | `text` | YES | | `awareness`, `consideration`, `decision`, `retention` |
+| `description` | `text` | YES | | Freeform description of the segment |
+| `pain_points` | `text[]` | YES | | Array of pain point statements |
+| `goals` | `text[]` | YES | | Array of goal statements |
+| `created_at` | `timestamptz` | NO | `now()` | |
+| `updated_at` | `timestamptz` | NO | `now()` | |
+
+**Constraints:** CHECK on `buyer_stage`  
+**Indexes:**
+- `idx_target_audiences_rank` on `(customer_id, rank)`
+- `idx_target_audiences_partner` on `partner_id`
+
+**RLS policies:**
+- `partner_access` — ALL where `partner_id = app.current_partner_id`
+- `customer_read` — SELECT where `customer_id = app.current_customer_id AND partner_id = app.current_partner_id`
+
+---
+
+### `info_base_entries`
+Free-form knowledge base entries for a customer — facts, FAQs, key messages, and other context fed to AI generation.
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| `id` | `serial` | NO | auto-increment | PK |
+| `partner_id` | `integer` | NO | | FK → `partners.id` ON DELETE CASCADE |
+| `customer_id` | `integer` | NO | | FK → `customers.id` ON DELETE CASCADE |
+| `category` | `text` | YES | | Grouping label e.g. `faq`, `brand_story`, `awards` |
+| `title` | `text` | NO | | Entry heading |
+| `content` | `text` | NO | | Entry body |
+| `is_key_message` | `boolean` | NO | `false` | Flagged entries are prioritised in AI prompts |
+| `created_at` | `timestamptz` | NO | `now()` | |
+| `updated_at` | `timestamptz` | NO | `now()` | |
+
+**Indexes:**
+- `idx_info_base_entries_customer` on `(customer_id, category)`
+- `idx_info_base_entries_partner` on `partner_id`
+
+**RLS policies:**
+- `partner_access` — ALL where `partner_id = app.current_partner_id`
+- `customer_read` — SELECT where `customer_id = app.current_customer_id AND partner_id = app.current_partner_id`
+
+---
+
+### `products_and_services`
+Catalogue of products and services offered by a customer, used as context for AI content generation.
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| `id` | `serial` | NO | auto-increment | PK |
+| `partner_id` | `integer` | NO | | FK → `partners.id` ON DELETE CASCADE |
+| `customer_id` | `integer` | NO | | FK → `customers.id` ON DELETE CASCADE |
+| `name` | `text` | NO | | Product or service name |
+| `type` | `text` | NO | | `product`, `service`, `bundle` |
+| `description` | `text` | YES | | |
+| `price_cents` | `integer` | YES | | Price in smallest currency unit |
+| `currency` | `text` | YES | | ISO 4217 currency code e.g. `USD` |
+| `price_model` | `text` | YES | | e.g. `one_time`, `monthly`, `annual`, `custom` |
+| `url` | `text` | YES | | Link to the product/service page |
+| `is_featured` | `boolean` | NO | `false` | Flagged entries are prioritised in AI prompts |
+| `sort_order` | `integer` | NO | `0` | Display order |
+| `metadata` | `jsonb` | YES | | Arbitrary structured metadata |
+| `created_at` | `timestamptz` | NO | `now()` | |
+| `updated_at` | `timestamptz` | NO | `now()` | |
+
+**Constraints:** CHECK on `type` — IN (product, service, bundle)  
+**Indexes:**
+- `idx_products_and_services_customer` on `(customer_id, sort_order)`
+- `idx_products_and_services_partner` on `partner_id`
+
+**RLS policies:**
+- `partner_access` — ALL where `partner_id = app.current_partner_id`
+- `customer_read` — SELECT where `customer_id = app.current_customer_id AND partner_id = app.current_partner_id`
+
+---
+
+### `customer_contacts`
+People at a customer organisation — contacts for reporting, billing, or general communication.
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| `id` | `serial` | NO | auto-increment | PK |
+| `partner_id` | `integer` | NO | | FK → `partners.id` ON DELETE CASCADE |
+| `customer_id` | `integer` | NO | | FK → `customers.id` ON DELETE CASCADE |
+| `full_name` | `text` | NO | | |
+| `title` | `text` | YES | | Job title |
+| `email` | `text` | YES | | |
+| `phone` | `text` | YES | | |
+| `is_primary` | `boolean` | NO | `false` | Primary contact for the customer account |
+| `receives_reports` | `boolean` | NO | `false` | Whether this contact receives automated reports |
+| `notes` | `text` | YES | | Internal notes |
+| `created_at` | `timestamptz` | NO | `now()` | |
+| `updated_at` | `timestamptz` | NO | `now()` | |
+
+**Indexes:**
+- `idx_customer_contacts_customer` on `customer_id`
+- `idx_customer_contacts_partner` on `partner_id`
+- `idx_customer_contacts_primary` on `customer_id` WHERE `is_primary = true`
+
+**RLS policies:** `partner_access` — ALL where `partner_id = app.current_partner_id`
+
+---
+
 ## Relationships
 
 ```
 plans
-  └── partners               (plan_id → plans.id)
+  └── partners                    (plan_id → plans.id)
 
 industries
-  └── customers              (industry_id → industries.id)
+  └── customers                   (industry_id → industries.id)
 
 partners
-  └── customers              (partner_id → partners.id)
-  └── users                  (partner_id → partners.id)
-  └── ai_token_usage         (partner_id → partners.id)
-  └── partner_token_balance  (partner_id → partners.id)
-  └── app_agents             (partner_id → partners.id)
+  └── customers                   (partner_id → partners.id)
+  └── users                       (partner_id → partners.id)
+  └── ai_token_usage              (partner_id → partners.id)
+  └── partner_token_balance       (partner_id → partners.id)
+  └── app_agents                  (partner_id → partners.id)
+  └── customer_services           (partner_id → partners.id)
+  └── customer_service_channels   (partner_id → partners.id)
+  └── customer_documents          (partner_id → partners.id)
+  └── brand_voice                 (partner_id → partners.id)
+  └── brand_voice_inputs          (partner_id → partners.id)
+  └── target_audiences            (partner_id → partners.id)
+  └── info_base_entries           (partner_id → partners.id)
+  └── products_and_services       (partner_id → partners.id)
+  └── customer_contacts           (partner_id → partners.id)
 
 customers
-  └── users                  (customer_id → customers.id)
-  └── ai_token_usage         (customer_id → customers.id)
+  └── users                       (customer_id → customers.id)
+  └── ai_token_usage              (customer_id → customers.id)
+  └── customer_services           (customer_id → customers.id)
+  └── customer_service_channels   (customer_id → customers.id)
+  └── customer_documents          (customer_id → customers.id)
+  └── brand_voice                 (customer_id → customers.id)
+  └── brand_voice_inputs          (customer_id → customers.id)
+  └── target_audiences            (customer_id → customers.id)
+  └── info_base_entries           (customer_id → customers.id)
+  └── products_and_services       (customer_id → customers.id)
+  └── customer_contacts           (customer_id → customers.id)
 
 roles
-  └── users                  (role_id → roles.id)
-  └── role_permissions       (role_id → roles.id)
+  └── users                       (role_id → roles.id)
+  └── role_permissions            (role_id → roles.id)
 
 users
-  └── ai_token_usage         (user_id → users.id)
+  └── ai_token_usage              (user_id → users.id)
+  └── customer_documents          (created_by_user_id → users.id)
 
 permissions
-  └── role_permissions       (permission_id → permissions.id)
+  └── role_permissions            (permission_id → permissions.id)
 
 app_agents
-  └── chat_sessions          (current_agent_key → app_agents.key)
+  └── chat_sessions               (current_agent_key → app_agents.key)
 
 users
-  └── chat_sessions          (user_id → users.id)
-  └── chat_session_shares    (shared_with_user_id → users.id)
+  └── chat_sessions               (user_id → users.id)
+  └── chat_session_shares         (shared_with_user_id → users.id)
 
 chat_sessions
-  └── chat_messages          (session_id → chat_sessions.id)
-  └── chat_session_shares    (session_id → chat_sessions.id)
+  └── chat_messages               (session_id → chat_sessions.id)
+  └── chat_session_shares         (session_id → chat_sessions.id)
 ```

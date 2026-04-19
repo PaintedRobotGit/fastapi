@@ -19,6 +19,7 @@ from sqlalchemy import (
     false,
     true,
 )
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func, text
 
@@ -82,7 +83,7 @@ class Customer(Base):
     __tablename__ = "customers"
 
     __table_args__ = (
-        UniqueConstraint("partner_id", "slug", name="uq_customer_partner_slug"),
+        UniqueConstraint("slug", name="uq_customers_slug"),
         Index("idx_customers_partner_id", "partner_id"),
         Index(
             "idx_customers_partner_status",
@@ -282,6 +283,195 @@ class AiTokenUsage(Base):
     billable_period: Mapped[date] = mapped_column(Date, nullable=False)
     user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class CustomerServices(Base):
+    __tablename__ = "customer_services"
+
+    __table_args__ = (
+        Index("idx_customer_services_partner", "partner_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    partner_id: Mapped[int] = mapped_column(Integer, ForeignKey("partners.id", ondelete="CASCADE"), nullable=False)
+    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, unique=True)
+    seo_notes: Mapped[str | None] = mapped_column(Text)
+    ads_notes: Mapped[str | None] = mapped_column(Text)
+    social_notes: Mapped[str | None] = mapped_column(Text)
+    email_notes: Mapped[str | None] = mapped_column(Text)
+    website_notes: Mapped[str | None] = mapped_column(Text)
+    creative_notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+
+class CustomerServiceChannel(Base):
+    __tablename__ = "customer_service_channels"
+
+    __table_args__ = (
+        UniqueConstraint("customer_id", "service_area", "channel_label", name="uq_service_channel"),
+        Index("idx_customer_service_channels_customer", "customer_id"),
+        Index("idx_customer_service_channels_partner", "partner_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    partner_id: Mapped[int] = mapped_column(Integer, ForeignKey("partners.id", ondelete="CASCADE"), nullable=False)
+    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    service_area: Mapped[str] = mapped_column(Text, nullable=False)
+    channel_label: Mapped[str] = mapped_column(Text, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=true())
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class CustomerDocument(Base):
+    __tablename__ = "customer_documents"
+
+    __table_args__ = (
+        Index("idx_customer_documents_type", "customer_id", "document_type", "status"),
+        Index("idx_customer_documents_partner", "partner_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    partner_id: Mapped[int] = mapped_column(Integer, ForeignKey("partners.id", ondelete="CASCADE"), nullable=False)
+    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    document_type: Mapped[str] = mapped_column(Text, nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    version: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'1.0'"))
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'current'"))
+    content: Mapped[str | None] = mapped_column(Text)
+    content_format: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'markdown'"))
+    metadata: Mapped[dict | None] = mapped_column(JSONB)
+    created_by_user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+
+class BrandVoice(Base):
+    __tablename__ = "brand_voice"
+
+    __table_args__ = (
+        Index("idx_brand_voice_partner", "partner_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    partner_id: Mapped[int] = mapped_column(Integer, ForeignKey("partners.id", ondelete="CASCADE"), nullable=False)
+    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, unique=True)
+    tone_descriptors: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
+    voice_detail: Mapped[str | None] = mapped_column(Text)
+    dos: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
+    donts: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
+    example_phrases: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+
+class BrandVoiceInput(Base):
+    __tablename__ = "brand_voice_inputs"
+
+    __table_args__ = (
+        Index("idx_brand_voice_inputs_customer", "customer_id"),
+        Index("idx_brand_voice_inputs_partner", "partner_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    partner_id: Mapped[int] = mapped_column(Integer, ForeignKey("partners.id", ondelete="CASCADE"), nullable=False)
+    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    input_type: Mapped[str | None] = mapped_column(Text)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    submitted_by: Mapped[str | None] = mapped_column(Text)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class TargetAudience(Base):
+    __tablename__ = "target_audiences"
+
+    __table_args__ = (
+        Index("idx_target_audiences_rank", "customer_id", "rank"),
+        Index("idx_target_audiences_partner", "partner_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    partner_id: Mapped[int] = mapped_column(Integer, ForeignKey("partners.id", ondelete="CASCADE"), nullable=False)
+    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("99"))
+    demographics: Mapped[dict | None] = mapped_column(JSONB)
+    psychographics: Mapped[dict | None] = mapped_column(JSONB)
+    buyer_stage: Mapped[str | None] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
+    pain_points: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
+    goals: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+
+class InfoBaseEntry(Base):
+    __tablename__ = "info_base_entries"
+
+    __table_args__ = (
+        Index("idx_info_base_entries_customer", "customer_id", "category"),
+        Index("idx_info_base_entries_partner", "partner_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    partner_id: Mapped[int] = mapped_column(Integer, ForeignKey("partners.id", ondelete="CASCADE"), nullable=False)
+    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    category: Mapped[str | None] = mapped_column(Text)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    is_key_message: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+
+class ProductOrService(Base):
+    __tablename__ = "products_and_services"
+
+    __table_args__ = (
+        Index("idx_products_and_services_customer", "customer_id", "sort_order"),
+        Index("idx_products_and_services_partner", "partner_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    partner_id: Mapped[int] = mapped_column(Integer, ForeignKey("partners.id", ondelete="CASCADE"), nullable=False)
+    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    type: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    price_cents: Mapped[int | None] = mapped_column(Integer)
+    currency: Mapped[str | None] = mapped_column(Text)
+    price_model: Mapped[str | None] = mapped_column(Text)
+    url: Mapped[str | None] = mapped_column(Text)
+    is_featured: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    metadata: Mapped[dict | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+
+class CustomerContact(Base):
+    __tablename__ = "customer_contacts"
+
+    __table_args__ = (
+        Index("idx_customer_contacts_primary", "customer_id", postgresql_where=text("is_primary = true")),
+        Index("idx_customer_contacts_customer", "customer_id"),
+        Index("idx_customer_contacts_partner", "partner_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    partner_id: Mapped[int] = mapped_column(Integer, ForeignKey("partners.id", ondelete="CASCADE"), nullable=False)
+    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    full_name: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str | None] = mapped_column(Text)
+    email: Mapped[str | None] = mapped_column(Text)
+    phone: Mapped[str | None] = mapped_column(Text)
+    is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
+    receives_reports: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
 
 class PartnerTokenBalance(Base):

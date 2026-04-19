@@ -45,7 +45,6 @@ class IndustryRead(BaseModel):
 class PartnerCreate(BaseModel):
     name: str = Field(max_length=255)
     email: str | None = Field(default=None, max_length=255)
-    slug: str | None = Field(default=None, max_length=100)
     plan_id: int
     timezone: str = Field(default="UTC", max_length=100)
     status: str = Field(
@@ -63,7 +62,6 @@ class PartnerCreate(BaseModel):
 class PartnerUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=255)
     email: str | None = Field(default=None, max_length=255)
-    slug: str | None = Field(default=None, max_length=100)
     plan_id: int | None = None
     timezone: str | None = Field(default=None, max_length=100)
     status: str | None = Field(
@@ -103,10 +101,6 @@ class PartnerRead(BaseModel):
 class CustomerCreate(BaseModel):
     partner_id: int
     name: str = Field(max_length=255)
-    slug: str | None = Field(
-        default=None,
-        description="URL-friendly id unique per partner; auto-generated from name when omitted.",
-    )
     email: str | None = Field(default=None, max_length=255)
     industry_id: int | None = None
     timezone: str = Field(default="UTC", max_length=100)
@@ -133,7 +127,6 @@ class CustomerCreate(BaseModel):
 class CustomerUpdate(BaseModel):
     partner_id: int | None = None
     name: str | None = Field(default=None, max_length=255)
-    slug: str | None = None
     email: str | None = Field(default=None, max_length=255)
     industry_id: int | None = None
     timezone: str | None = Field(default=None, max_length=100)
@@ -429,6 +422,291 @@ class AppleOAuthRequest(BaseModel):
         if self.partner_id is not None and self.customer_id is not None:
             raise ValueError("partner_id and customer_id cannot both be set")
         return self
+
+
+# --- Customer profile (services, channels, documents, brand, audiences, info base, products, contacts) ---
+
+
+class CustomerServicesUpdate(BaseModel):
+    seo_notes: str | None = None
+    ads_notes: str | None = None
+    social_notes: str | None = None
+    email_notes: str | None = None
+    website_notes: str | None = None
+    creative_notes: str | None = None
+
+
+class CustomerServicesRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    partner_id: int
+    customer_id: int
+    seo_notes: str | None
+    ads_notes: str | None
+    social_notes: str | None
+    email_notes: str | None
+    website_notes: str | None
+    creative_notes: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CustomerServiceChannelCreate(BaseModel):
+    service_area: str = Field(description="seo | ads | social | email | website | creative | reporting | analytics")
+    channel_label: str
+    is_active: bool = True
+    notes: str | None = None
+
+
+class CustomerServiceChannelUpdate(BaseModel):
+    channel_label: str | None = None
+    is_active: bool | None = None
+    notes: str | None = None
+
+
+class CustomerServiceChannelRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    partner_id: int
+    customer_id: int
+    service_area: str
+    channel_label: str
+    is_active: bool
+    notes: str | None
+    created_at: datetime
+
+
+class CustomerDocumentCreate(BaseModel):
+    document_type: str = Field(description="project_doc | audit_context | audit_summary | report | other")
+    name: str
+    version: str = "1.0"
+    status: str = Field(default="current", description="current | stale | archived")
+    content: str | None = None
+    content_format: str = Field(default="markdown", description="markdown | html | plaintext | json")
+    metadata: dict | None = None
+
+
+class CustomerDocumentUpdate(BaseModel):
+    name: str | None = None
+    version: str | None = None
+    status: str | None = Field(default=None, description="current | stale | archived")
+    content: str | None = None
+    content_format: str | None = None
+    metadata: dict | None = None
+
+
+class CustomerDocumentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    partner_id: int
+    customer_id: int
+    document_type: str
+    name: str
+    version: str
+    status: str
+    content: str | None
+    content_format: str
+    metadata: dict | None
+    created_by_user_id: int | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class BrandVoiceUpdate(BaseModel):
+    tone_descriptors: list[str] | None = None
+    voice_detail: str | None = None
+    dos: list[str] | None = None
+    donts: list[str] | None = None
+    example_phrases: list[str] | None = None
+
+
+class BrandVoiceRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    partner_id: int
+    customer_id: int
+    tone_descriptors: list[str] | None
+    voice_detail: str | None
+    dos: list[str] | None
+    donts: list[str] | None
+    example_phrases: list[str] | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class BrandVoiceInputCreate(BaseModel):
+    input_type: str | None = None
+    content: str
+    submitted_by: str | None = None
+    notes: str | None = None
+
+
+class BrandVoiceInputRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    partner_id: int
+    customer_id: int
+    input_type: str | None
+    content: str
+    submitted_by: str | None
+    notes: str | None
+    created_at: datetime
+
+
+class TargetAudienceCreate(BaseModel):
+    name: str
+    rank: int = 99
+    demographics: dict | None = None
+    psychographics: dict | None = None
+    buyer_stage: str | None = Field(default=None, description="awareness | consideration | decision | retention")
+    description: str | None = None
+    pain_points: list[str] | None = None
+    goals: list[str] | None = None
+
+
+class TargetAudienceUpdate(BaseModel):
+    name: str | None = None
+    rank: int | None = None
+    demographics: dict | None = None
+    psychographics: dict | None = None
+    buyer_stage: str | None = None
+    description: str | None = None
+    pain_points: list[str] | None = None
+    goals: list[str] | None = None
+
+
+class TargetAudienceRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    partner_id: int
+    customer_id: int
+    name: str
+    rank: int
+    demographics: dict | None
+    psychographics: dict | None
+    buyer_stage: str | None
+    description: str | None
+    pain_points: list[str] | None
+    goals: list[str] | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class InfoBaseEntryCreate(BaseModel):
+    category: str | None = None
+    title: str
+    content: str
+    is_key_message: bool = False
+
+
+class InfoBaseEntryUpdate(BaseModel):
+    category: str | None = None
+    title: str | None = None
+    content: str | None = None
+    is_key_message: bool | None = None
+
+
+class InfoBaseEntryRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    partner_id: int
+    customer_id: int
+    category: str | None
+    title: str
+    content: str
+    is_key_message: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProductOrServiceCreate(BaseModel):
+    name: str
+    type: str = Field(description="product | service | bundle")
+    description: str | None = None
+    price_cents: int | None = None
+    currency: str | None = None
+    price_model: str | None = None
+    url: str | None = None
+    is_featured: bool = False
+    sort_order: int = 0
+    metadata: dict | None = None
+
+
+class ProductOrServiceUpdate(BaseModel):
+    name: str | None = None
+    type: str | None = None
+    description: str | None = None
+    price_cents: int | None = None
+    currency: str | None = None
+    price_model: str | None = None
+    url: str | None = None
+    is_featured: bool | None = None
+    sort_order: int | None = None
+    metadata: dict | None = None
+
+
+class ProductOrServiceRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    partner_id: int
+    customer_id: int
+    name: str
+    type: str
+    description: str | None
+    price_cents: int | None
+    currency: str | None
+    price_model: str | None
+    url: str | None
+    is_featured: bool
+    sort_order: int
+    metadata: dict | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CustomerContactCreate(BaseModel):
+    full_name: str
+    title: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    is_primary: bool = False
+    receives_reports: bool = False
+    notes: str | None = None
+
+
+class CustomerContactUpdate(BaseModel):
+    full_name: str | None = None
+    title: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    is_primary: bool | None = None
+    receives_reports: bool | None = None
+    notes: str | None = None
+
+
+class CustomerContactRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    partner_id: int
+    customer_id: int
+    full_name: str
+    title: str | None
+    email: str | None
+    phone: str | None
+    is_primary: bool
+    receives_reports: bool
+    notes: str | None
+    created_at: datetime
+    updated_at: datetime
 
 
 # --- App agents ---

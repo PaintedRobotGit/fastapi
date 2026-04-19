@@ -17,6 +17,7 @@ from routers import (
     ai_token_usage,
     auth,
     chat,
+    customer_profile,
     customers,
     industries,
     onboarding,
@@ -135,6 +136,7 @@ app.include_router(plans.router)
 app.include_router(industries.router)
 app.include_router(partners.router)
 app.include_router(customers.router)
+app.include_router(customer_profile.router)
 app.include_router(roles.router)
 app.include_router(permissions.router)
 app.include_router(users.router)

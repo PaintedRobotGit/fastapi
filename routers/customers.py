@@ -1,5 +1,3 @@
-import re
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -14,27 +12,9 @@ from access import (
 from database import get_db
 from models import Customer, Industry, Partner
 from schemas import CustomerCreate, CustomerRead, CustomerUpdate
+from slug_utils import generate_slug
 
 router = APIRouter(prefix="/customers", tags=["customers"])
-
-
-def _slug_base(name: str) -> str:
-    s = name.lower().strip()
-    s = re.sub(r"[^a-z0-9]+", "-", s)
-    return s.strip("-") or "customer"
-
-
-async def _allocate_unique_slug(db: AsyncSession, partner_id: int, base: str) -> str:
-    candidate = base
-    n = 2
-    while True:
-        r = await db.execute(
-            select(Customer.id).where(Customer.partner_id == partner_id, Customer.slug == candidate)
-        )
-        if r.scalar_one_or_none() is None:
-            return candidate
-        candidate = f"{base}-{n}"
-        n += 1
 
 
 @router.get("/", response_model=list[CustomerRead])
@@ -103,11 +83,8 @@ async def create_customer(
             raise HTTPException(status_code=403, detail="Cannot create customers for another partner.")
     if payload.industry_id is not None and await db.get(Industry, payload.industry_id) is None:
         raise HTTPException(status_code=400, detail="Invalid industry_id.")
-    base_slug = _slug_base(payload.slug) if payload.slug else _slug_base(payload.name)
-    slug = await _allocate_unique_slug(db, payload.partner_id, base_slug)
-    data = payload.model_dump()
-    data.pop("slug", None)
-    customer = Customer(**data, slug=slug)
+    slug = await generate_slug(db, Customer)
+    customer = Customer(**payload.model_dump(), slug=slug)
     db.add(customer)
     try:
         await db.flush()
@@ -140,8 +117,7 @@ async def update_customer(
         parent = await db.get(Partner, updates["partner_id"])
         if parent is None:
             raise HTTPException(status_code=400, detail="Partner does not exist for partner_id.")
-    if "slug" in updates and updates["slug"] is not None:
-        updates["slug"] = _slug_base(updates["slug"])
+    updates.pop("slug", None)
     for field, value in updates.items():
         setattr(customer, field, value)
     try:
