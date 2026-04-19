@@ -20,6 +20,7 @@ from routers import (
     customer_profile,
     customers,
     industries,
+    meta,
     onboarding,
     partner_token_balance,
     partners,
@@ -90,6 +91,8 @@ def _path_is_public(path: str) -> bool:
         return True
     if path.startswith("/industries"):
         return True
+    if path.startswith("/meta/enums"):
+        return True
     if path in ("/auth/register", "/auth/login", "/auth/signup"):
         return True
     if path.startswith("/auth/oauth") or path.startswith("/auth/signup"):
@@ -131,6 +134,7 @@ app.openapi = custom_openapi
 
 app.include_router(agents.router)
 app.include_router(auth.router)
+app.include_router(meta.router)
 app.include_router(onboarding.router)
 app.include_router(plans.router)
 app.include_router(industries.router)

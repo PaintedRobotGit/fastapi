@@ -7,6 +7,18 @@ import re
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from constants import (
+    BuyerStage,
+    ContentFormat,
+    CustomerStatus,
+    DocumentStatus,
+    DocumentType,
+    PartnerStatus,
+    ProductType,
+    ServiceArea,
+    VoiceInputType,
+)
+
 
 # --- Plans ---
 
@@ -47,11 +59,7 @@ class PartnerCreate(BaseModel):
     email: str | None = Field(default=None, max_length=255)
     plan_id: int
     timezone: str = Field(default="UTC", max_length=100)
-    status: str = Field(
-        default="active",
-        max_length=50,
-        description="trial | active | past_due | canceled | suspended",
-    )
+    status: PartnerStatus = "active"
     trial_ends_at: datetime | None = None
     subscription_expires_at: datetime | None = None
     country: str | None = None
@@ -64,11 +72,7 @@ class PartnerUpdate(BaseModel):
     email: str | None = Field(default=None, max_length=255)
     plan_id: int | None = None
     timezone: str | None = Field(default=None, max_length=100)
-    status: str | None = Field(
-        default=None,
-        max_length=50,
-        description="trial | active | past_due | canceled | suspended",
-    )
+    status: PartnerStatus | None = None
     trial_ends_at: datetime | None = None
     subscription_expires_at: datetime | None = None
     country: str | None = None
@@ -107,11 +111,7 @@ class CustomerCreate(BaseModel):
     website_url: str | None = None
     currency: str = Field(default="USD", max_length=16)
     customer_type: str | None = Field(default=None, max_length=32)
-    status: str = Field(
-        default="prep",
-        max_length=32,
-        description="prep | active | on_hold | archived",
-    )
+    status: CustomerStatus = "prep"
     notes: str | None = None
     colour: str | None = Field(default=None, description="Hex colour code e.g. #FF5733")
     archived_at: datetime | None = None
@@ -133,11 +133,7 @@ class CustomerUpdate(BaseModel):
     website_url: str | None = None
     currency: str | None = Field(default=None, max_length=16)
     customer_type: str | None = Field(default=None, max_length=32)
-    status: str | None = Field(
-        default=None,
-        max_length=32,
-        description="prep | active | on_hold | archived",
-    )
+    status: CustomerStatus | None = None
     notes: str | None = None
     colour: str | None = Field(default=None, description="Hex colour code e.g. #FF5733")
     archived_at: datetime | None = None
@@ -453,7 +449,7 @@ class CustomerServicesRead(BaseModel):
 
 
 class CustomerServiceChannelCreate(BaseModel):
-    service_area: str = Field(description="seo | ads | social | email | website | creative | reporting | analytics")
+    service_area: ServiceArea
     channel_label: str
     is_active: bool = True
     notes: str | None = None
@@ -479,21 +475,21 @@ class CustomerServiceChannelRead(BaseModel):
 
 
 class CustomerDocumentCreate(BaseModel):
-    document_type: str = Field(description="project_doc | audit_context | audit_summary | report | other")
+    document_type: DocumentType
     name: str
     version: str = "1.0"
-    status: str = Field(default="current", description="current | stale | archived")
+    status: DocumentStatus = "current"
     content: str | None = None
-    content_format: str = Field(default="markdown", description="markdown | html | plaintext | json")
+    content_format: ContentFormat = "markdown"
     meta: dict | None = None
 
 
 class CustomerDocumentUpdate(BaseModel):
     name: str | None = None
     version: str | None = None
-    status: str | None = Field(default=None, description="current | stale | archived")
+    status: DocumentStatus | None = None
     content: str | None = None
-    content_format: str | None = None
+    content_format: ContentFormat | None = None
     meta: dict | None = None
 
 
@@ -539,7 +535,7 @@ class BrandVoiceRead(BaseModel):
 
 
 class BrandVoiceInputCreate(BaseModel):
-    input_type: str | None = None
+    input_type: VoiceInputType | None = None
     content: str
     submitted_by: str | None = None
     notes: str | None = None
@@ -551,7 +547,7 @@ class BrandVoiceInputRead(BaseModel):
     id: int
     partner_id: int
     customer_id: int
-    input_type: str | None
+    input_type: VoiceInputType | None
     content: str
     submitted_by: str | None
     notes: str | None
@@ -563,7 +559,7 @@ class TargetAudienceCreate(BaseModel):
     rank: int = 99
     demographics: dict | None = None
     psychographics: dict | None = None
-    buyer_stage: str | None = Field(default=None, description="awareness | consideration | decision | retention")
+    buyer_stage: BuyerStage | None = None
     description: str | None = None
     pain_points: list[str] | None = None
     goals: list[str] | None = None
@@ -628,7 +624,7 @@ class InfoBaseEntryRead(BaseModel):
 
 class ProductOrServiceCreate(BaseModel):
     name: str
-    type: str = Field(description="product | service | bundle")
+    type: ProductType
     description: str | None = None
     price_cents: int | None = None
     currency: str | None = None
@@ -641,7 +637,7 @@ class ProductOrServiceCreate(BaseModel):
 
 class ProductOrServiceUpdate(BaseModel):
     name: str | None = None
-    type: str | None = None
+    type: ProductType | None = None
     description: str | None = None
     price_cents: int | None = None
     currency: str | None = None

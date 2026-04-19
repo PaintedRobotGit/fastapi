@@ -74,7 +74,7 @@ Agency accounts that purchase and manage the platform.
 | `created_at` | `timestamptz` | NO | `now()` | |
 | `updated_at` | `timestamptz` | NO | `now()` | |
 
-**Constraints:** `slug` unique; `partners_status_check` — status IN (trial, active, past_due, canceled, suspended)  
+**Constraints:** `partners_slug_key` — `slug` unique; `partners_status_check` — status IN (trial, active, past_due, canceled, suspended)  
 **Indexes:** `idx_partners_status` on `status` WHERE `archived_at IS NULL`
 
 ---
@@ -101,7 +101,7 @@ Client accounts owned by a Partner.
 | `created_at` | `timestamptz` | NO | `now()` | |
 | `updated_at` | `timestamptz` | NO | `now()` | |
 
-**Constraints:** `uq_customers_slug` — `slug` unique (global); CHECK on `currency`, `customer_type`, `status`  
+**Constraints:** `uq_customers_slug` — `slug` unique (global); `customers_currency_check` — currency IN (USD, CAD, EUR, GBP, AUD); `customers_customer_type_check` — customer_type IN (lead_gen, ecommerce, hybrid, other); `customers_status_check` — status IN (prep, active, on_hold, archived)  
 **Indexes:**
 - `idx_customers_partner_id` on `partner_id`
 - `idx_customers_partner_status` on `(partner_id, status)` WHERE `archived_at IS NULL`
@@ -155,12 +155,14 @@ Defines the available roles per tier. Roles are seeded — not user-created.
 |--------|------|----------|---------|-------|
 | `id` | `serial` | NO | auto-increment | PK |
 | `name` | `varchar(50)` | NO | | Unique. e.g. `partner_owner` |
-| `display_name` | `varchar(100)` | YES | | Human-readable label for UI |
 | `tier` | `varchar(20)` | NO | | `admin`, `partner`, or `customer` |
+| `display_name` | `varchar(100)` | YES | | Human-readable label for UI |
 | `description` | `text` | YES | | |
 | `is_default` | `boolean` | NO | `false` | Default role assigned for that tier on signup |
 | `sort_order` | `integer` | NO | `99` | Display order |
 | `created_at` | `timestamptz` | NO | `now()` | |
+
+**Constraints:** `roles_tier_check` — tier IN (admin, partner, customer)
 
 **Seeded roles:**
 
@@ -233,9 +235,9 @@ Registry of available AI agents in the platform. Global agents (`partner_id IS N
 | `is_default` | `boolean` | NO | `false` | Whether this agent is pre-selected for new sessions |
 | `enabled` | `boolean` | NO | `true` | Soft-disable without deleting |
 | `partner_id` | `integer` | YES | | FK → `partners.id` ON DELETE CASCADE — NULL = global agent |
+| `thinking_default` | `boolean` | NO | `false` | Whether extended thinking is enabled by default for this agent |
 | `created_at` | `timestamptz` | NO | `now()` | |
 | `updated_at` | `timestamptz` | NO | `now()` | |
-| `thinking_default` | `boolean` | NO | `false` | Whether extended thinking is enabled by default for this agent |
 
 **Indexes:**
 - `idx_app_agents_category` on `category` WHERE `enabled = true`
@@ -326,6 +328,7 @@ Individual turns within a chat session. Role matches the Anthropic/OpenAI messag
 | `model` | `text` | YES | | AI model used; null for user/system turns |
 | `created_at` | `timestamptz` | NO | `now()` | |
 
+**Constraints:** `chat_messages_role_check` — role IN (user, assistant, system)  
 **Indexes:** `idx_chat_messages_session` on `(session_id, created_at ASC)`
 
 ---
@@ -382,7 +385,7 @@ Individual delivery channels per service area for a customer. Multiple channels 
 | `notes` | `text` | YES | | |
 | `created_at` | `timestamptz` | NO | `now()` | |
 
-**Constraints:** `customer_service_channels_customer_id_service_area_channel__key` — `(customer_id, service_area, channel_label)` unique; CHECK on `service_area`  
+**Constraints:** `customer_service_channels_customer_id_service_area_channel__key` — `(customer_id, service_area, channel_label)` unique; `customer_service_channels_service_area_check` — service_area IN (seo, ads, social, email, website, creative, reporting, analytics)  
 **Indexes:**
 - `idx_customer_service_channels_customer` on `customer_id`
 - `idx_customer_service_channels_partner` on `partner_id`
@@ -410,7 +413,7 @@ Versioned documents attached to a customer — audits, project docs, reports, an
 | `created_at` | `timestamptz` | NO | `now()` | |
 | `updated_at` | `timestamptz` | NO | `now()` | |
 
-**Constraints:** CHECK on `document_type`, `status`, `content_format`  
+**Constraints:** `customer_documents_document_type_check` — document_type IN (project_doc, audit_context, audit_summary, report, other); `customer_documents_status_check` — status IN (current, stale, archived); `customer_documents_content_format_check` — content_format IN (markdown, html, plaintext, json)  
 **Indexes:**
 - `idx_customer_documents_partner` on `partner_id`
 - `idx_customer_documents_type` on `(customer_id, document_type, status)`
@@ -446,19 +449,20 @@ One-row-per-customer brand voice profile. Stores tone descriptors, style rules, 
 ---
 
 ### `brand_voice_inputs`
-Raw input submissions (copy samples, style notes, etc.) used to build or refine a customer's brand voice profile. Multiple rows per customer.
+Raw input submissions used to build or refine a customer's brand voice profile. Multiple rows per customer.
 
 | Column | Type | Nullable | Default | Notes |
 |--------|------|----------|---------|-------|
 | `id` | `serial` | NO | auto-increment | PK |
 | `partner_id` | `integer` | NO | | FK → `partners.id` ON DELETE CASCADE |
 | `customer_id` | `integer` | NO | | FK → `customers.id` ON DELETE CASCADE |
-| `input_type` | `text` | YES | | e.g. `copy_sample`, `style_note`, `competitor_example` |
+| `input_type` | `text` | YES | | `seo`, `ads`, `social`, `email`, `website`, `creative`, `general` |
 | `content` | `text` | NO | | The raw input text |
 | `submitted_by` | `text` | YES | | Free-text attribution (name or role) |
 | `notes` | `text` | YES | | Internal notes on the input |
 | `created_at` | `timestamptz` | NO | `now()` | |
 
+**Constraints:** `chk_brand_voice_inputs_input_type` — input_type IN (seo, ads, social, email, website, creative, general)  
 **Indexes:**
 - `idx_brand_voice_inputs_customer` on `customer_id`
 - `idx_brand_voice_inputs_partner` on `partner_id`
@@ -486,7 +490,7 @@ Defined audience segments for a customer. Multiple rows per customer, ordered by
 | `created_at` | `timestamptz` | NO | `now()` | |
 | `updated_at` | `timestamptz` | NO | `now()` | |
 
-**Constraints:** CHECK on `buyer_stage`  
+**Constraints:** `target_audiences_buyer_stage_check` — buyer_stage IN (awareness, consideration, decision, retention)  
 **Indexes:**
 - `idx_target_audiences_rank` on `(customer_id, rank)`
 - `idx_target_audiences_partner` on `partner_id`
@@ -543,7 +547,7 @@ Catalogue of products and services offered by a customer, used as context for AI
 | `created_at` | `timestamptz` | NO | `now()` | |
 | `updated_at` | `timestamptz` | NO | `now()` | |
 
-**Constraints:** CHECK on `type` — IN (product, service, bundle)  
+**Constraints:** `products_and_services_type_check` — type IN (product, service, bundle)  
 **Indexes:**
 - `idx_products_and_services_customer` on `(customer_id, sort_order)`
 - `idx_products_and_services_partner` on `partner_id`
