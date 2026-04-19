@@ -485,7 +485,7 @@ class CustomerDocumentCreate(BaseModel):
     status: str = Field(default="current", description="current | stale | archived")
     content: str | None = None
     content_format: str = Field(default="markdown", description="markdown | html | plaintext | json")
-    metadata: dict | None = None
+    meta: dict | None = None
 
 
 class CustomerDocumentUpdate(BaseModel):
@@ -494,7 +494,7 @@ class CustomerDocumentUpdate(BaseModel):
     status: str | None = Field(default=None, description="current | stale | archived")
     content: str | None = None
     content_format: str | None = None
-    metadata: dict | None = None
+    meta: dict | None = None
 
 
 class CustomerDocumentRead(BaseModel):
@@ -509,7 +509,7 @@ class CustomerDocumentRead(BaseModel):
     status: str
     content: str | None
     content_format: str
-    metadata: dict | None
+    meta: dict | None
     created_by_user_id: int | None
     created_at: datetime
     updated_at: datetime
@@ -636,7 +636,7 @@ class ProductOrServiceCreate(BaseModel):
     url: str | None = None
     is_featured: bool = False
     sort_order: int = 0
-    metadata: dict | None = None
+    meta: dict | None = None
 
 
 class ProductOrServiceUpdate(BaseModel):
@@ -649,7 +649,7 @@ class ProductOrServiceUpdate(BaseModel):
     url: str | None = None
     is_featured: bool | None = None
     sort_order: int | None = None
-    metadata: dict | None = None
+    meta: dict | None = None
 
 
 class ProductOrServiceRead(BaseModel):
@@ -667,7 +667,7 @@ class ProductOrServiceRead(BaseModel):
     url: str | None
     is_featured: bool
     sort_order: int
-    metadata: dict | None
+    meta: dict | None
     created_at: datetime
     updated_at: datetime
 

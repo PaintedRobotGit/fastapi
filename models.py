@@ -341,7 +341,7 @@ class CustomerDocument(Base):
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'current'"))
     content: Mapped[str | None] = mapped_column(Text)
     content_format: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'markdown'"))
-    metadata: Mapped[dict | None] = mapped_column(JSONB)
+    meta: Mapped[dict | None] = mapped_column("metadata", JSONB)
     created_by_user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
@@ -446,7 +446,7 @@ class ProductOrService(Base):
     url: Mapped[str | None] = mapped_column(Text)
     is_featured: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
-    metadata: Mapped[dict | None] = mapped_column(JSONB)
+    meta: Mapped[dict | None] = mapped_column("metadata", JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
