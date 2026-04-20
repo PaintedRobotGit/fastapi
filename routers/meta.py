@@ -2,7 +2,6 @@ from fastapi import APIRouter
 
 from constants import (
     BLOG_POST_STATUSES,
-    BLOG_POST_TEMPLATE_KEYS,
     BUYER_STAGES,
     CONTENT_FORMATS,
     CUSTOMER_STATUSES,
@@ -19,7 +18,8 @@ router = APIRouter(prefix="/meta", tags=["meta"])
 
 @router.get("/enums")
 async def get_enums() -> dict[str, list[str]]:
-    """Returns all picklist values used across the API. Frontend should fetch this rather than hardcoding values."""
+    """Returns all picklist values used across the API. Frontend should fetch this rather than hardcoding values.
+    Blog post templates are not included here — use GET /blog-templates for the full template objects."""
     return {
         "service_areas": SERVICE_AREAS,
         "voice_input_types": VOICE_INPUT_TYPES,
@@ -31,5 +31,4 @@ async def get_enums() -> dict[str, list[str]]:
         "partner_statuses": PARTNER_STATUSES,
         "customer_statuses": CUSTOMER_STATUSES,
         "blog_post_statuses": BLOG_POST_STATUSES,
-        "blog_post_template_keys": BLOG_POST_TEMPLATE_KEYS,
     }

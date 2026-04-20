@@ -907,6 +907,54 @@ class BlogPostScheduleInput(BaseModel):
     scheduled_for: datetime
 
 
+# --- Blog Templates ---
+
+
+class BlogTemplateCreate(BaseModel):
+    key: str = Field(min_length=1, max_length=80)
+    surface: str = "blog"
+    label: str = Field(min_length=1, max_length=100)
+    description: str = ""
+    icon: str = ""
+    scaffold_markdown: str = ""
+    structure_prompt: str = ""
+    suggested_word_count_min: int = Field(default=200, ge=0)
+    suggested_word_count_max: int = Field(default=1500, ge=0)
+    sort_order: int = 0
+    is_active: bool = True
+
+
+class BlogTemplateUpdate(BaseModel):
+    surface: str | None = None
+    label: str | None = Field(default=None, min_length=1, max_length=100)
+    description: str | None = None
+    icon: str | None = None
+    scaffold_markdown: str | None = None
+    structure_prompt: str | None = None
+    suggested_word_count_min: int | None = Field(default=None, ge=0)
+    suggested_word_count_max: int | None = Field(default=None, ge=0)
+    sort_order: int | None = None
+    is_active: bool | None = None
+
+
+class BlogTemplateRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    key: str
+    surface: str
+    label: str
+    description: str
+    icon: str
+    scaffold_markdown: str
+    structure_prompt: str
+    suggested_word_count_min: int
+    suggested_word_count_max: int
+    sort_order: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
 # --- AI token usage & partner balance ---
 
 

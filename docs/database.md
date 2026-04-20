@@ -27,6 +27,8 @@ Subscription tiers defining feature limits per partner account.
 | `created_at` | `timestamptz` | NO | `now()` | |
 | `updated_at` | `timestamptz` | NO | `now()` | |
 
+**Constraints:** `plans_name_key` — `name` unique  
+
 **Seeded plans:**
 
 | Name | Token Limit | Max Customers | Max Users | Price/mo |
@@ -49,6 +51,8 @@ Reference list for categorising customer accounts.
 | `sort_order` | `integer` | NO | `0` | Display order |
 | `is_active` | `boolean` | NO | `true` | |
 | `created_at` | `timestamptz` | NO | `now()` | |
+
+**Constraints:** `industries_name_key` — `name` unique; `industries_slug_key` — `slug` unique  
 
 **Seeded industries:** Retail, Finance, Health & Wellness, Technology, Real Estate, Food & Beverage, Education, Healthcare, Legal, Construction, Manufacturing, Non-Profit, Hospitality & Tourism, Automotive, Professional Services, E-commerce, Media & Entertainment, Other
 
@@ -162,7 +166,7 @@ Defines the available roles per tier. Roles are seeded — not user-created.
 | `sort_order` | `integer` | NO | `99` | Display order |
 | `created_at` | `timestamptz` | NO | `now()` | |
 
-**Constraints:** `roles_tier_check` — tier IN (admin, partner, customer)
+**Constraints:** `roles_name_key` — `name` unique; `roles_tier_check` — tier IN (admin, partner, customer)
 
 **Seeded roles:**
 
@@ -188,6 +192,8 @@ Granular permission keys using `resource:action` format.
 | `key` | `varchar(100)` | NO | | Unique. e.g. `partner_customers:create` |
 | `description` | `text` | YES | | |
 | `created_at` | `timestamptz` | NO | `now()` | |
+
+**Constraints:** `permissions_key_key` — `key` unique  
 
 **Permission keys by scope:**
 
@@ -380,7 +386,7 @@ Blog posts created for a customer. Supports a full editorial workflow from draft
 | `canonical_url` | `text` | YES | | Canonical URL override |
 | `meta_robots` | `text` | NO | `'index,follow'` | Robots meta directive |
 | `featured_image_url` | `text` | YES | | Hero/featured image URL |
-| `template_key` | `text` | YES | | Layout template identifier |
+| `template_key` | `text` | YES | | FK → `blog_templates.key` — layout template identifier |
 | `generated_by_agent_key` | `text` | YES | | Agent key that generated this post (informational) |
 | `topic` | `text` | YES | | High-level topic or category label |
 | `target_audience_id` | `integer` | YES | | FK → `target_audiences.id` ON DELETE SET NULL |
@@ -409,15 +415,38 @@ Immutable version history for blog posts. A new row is appended whenever the pos
 | `body_markdown` | `text` | NO | | Full markdown body snapshot |
 | `body_json` | `jsonb` | YES | | Rich-text AST snapshot |
 | `word_count` | `integer` | NO | `0` | Word count at time of save |
+| `created_at` | `timestamptz` | NO | `now()` | |
+| `created_by_user_id` | `integer` | YES | | FK → `users.id` ON DELETE NO ACTION |
 | `source` | `text` | NO | | How the version was created: `manual_save`, `autosave`, `ai:blog_writer`, `ai:revise`, `status_change` |
 | `note` | `text` | YES | | Optional human note describing the version |
-| `created_by_user_id` | `integer` | YES | | FK → `users.id` ON DELETE NO ACTION |
-| `created_at` | `timestamptz` | NO | `now()` | |
 
 **Constraints:** `blog_post_versions_source_check` — source IN (manual_save, autosave, ai:blog_writer, ai:revise, status_change)  
 **Indexes:** `ix_blog_post_versions_post_created` on `(post_id, created_at DESC)`
 
 **RLS:** Not yet enabled on this table.
+
+---
+
+### `blog_templates`
+Reusable content templates that define structure and AI prompting guidance for blog post generation. Global registry — not scoped per partner or customer. Referenced by `blog_posts.template_key`.
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| `key` | `text` | NO | | PK. Stable identifier e.g. `how_to_guide` |
+| `surface` | `text` | NO | `'blog'` | Content surface this template targets e.g. `blog` |
+| `label` | `text` | NO | | Display name shown in the UI |
+| `description` | `text` | NO | | Short description of the template's purpose |
+| `icon` | `text` | NO | | Icon identifier for UI display |
+| `scaffold_markdown` | `text` | NO | `''` | Starter markdown structure placed into the editor |
+| `structure_prompt` | `text` | NO | `''` | AI system prompt guidance for content structure |
+| `suggested_word_count_min` | `integer` | NO | `200` | Lower bound of suggested word count range |
+| `suggested_word_count_max` | `integer` | NO | `1500` | Upper bound of suggested word count range |
+| `sort_order` | `integer` | NO | `0` | Display order within a surface |
+| `is_active` | `boolean` | NO | `true` | Soft-disable without deleting |
+| `created_at` | `timestamptz` | NO | `now()` | |
+| `updated_at` | `timestamptz` | NO | `now()` | |
+
+**Indexes:** `ix_blog_templates_surface_active` on `(surface, sort_order)` WHERE `is_active = true`
 
 ---
 
@@ -726,6 +755,9 @@ chat_sessions
 
 target_audiences
   └── blog_posts                  (target_audience_id → target_audiences.id)
+
+blog_templates
+  └── blog_posts                  (template_key → blog_templates.key)
 
 blog_posts
   └── blog_post_versions          (post_id → blog_posts.id)

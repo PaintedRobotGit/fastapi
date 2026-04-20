@@ -10,6 +10,7 @@ from access import effective_partner_id
 from models import (
     BlogPost,
     BlogPostVersion,
+    BlogTemplate,
     BrandVoice,
     BrandVoiceInput,
     Customer,
@@ -176,6 +177,19 @@ async def get_blog_post(customer_id: int, post_id: int) -> dict:
         post = await db.get(BlogPost, post_id)
         if post is None or post.customer_id != customer_id:
             raise ValueError(f"Blog post {post_id} not found")
+        template_data = None
+        if post.template_key:
+            tmpl = await db.get(BlogTemplate, post.template_key)
+            if tmpl:
+                template_data = {
+                    "label": tmpl.label,
+                    "structure_prompt": tmpl.structure_prompt,
+                    "suggested_word_count": {
+                        "min": tmpl.suggested_word_count_min,
+                        "max": tmpl.suggested_word_count_max,
+                    },
+                }
+
         return {
             "id": post.id,
             "title": post.title,
@@ -183,6 +197,7 @@ async def get_blog_post(customer_id: int, post_id: int) -> dict:
             "status": post.status,
             "topic": post.topic,
             "template_key": post.template_key,
+            "template": template_data,
             "target_audience_id": post.target_audience_id,
             "body_markdown": post.body_markdown,
             "excerpt": post.excerpt,

@@ -17,6 +17,7 @@ from routers import (
     ai_token_usage,
     auth,
     blog_posts,
+    blog_templates,
     chat,
     customer_profile,
     customers,
@@ -99,6 +100,8 @@ def _path_is_public(path: str) -> bool:
         return True
     if path.startswith("/industries"):
         return True
+    if path.startswith("/blog-templates"):
+        return True
     if path.startswith("/meta/enums"):
         return True
     if path in ("/auth/register", "/auth/login", "/auth/signup"):
@@ -144,6 +147,7 @@ app.include_router(agents.router)
 app.include_router(auth.router)
 app.include_router(meta.router)
 app.include_router(blog_posts.router)
+app.include_router(blog_templates.router)
 app.include_router(onboarding.router)
 app.include_router(plans.router)
 app.include_router(industries.router)

@@ -33,9 +33,8 @@ CustomerStatus = Literal["prep", "active", "on_hold", "archived"]
 
 # ── Blog posts ───────────────────────────────────────────────────────────────
 BlogPostStatus = Literal["draft", "review", "scheduled", "published", "archived"]
-# Template keys must stay in sync with shared/blog/templates.ts on the frontend.
-BlogPostTemplateKey = Literal["blank", "how_to", "listicle", "landing_style", "case_study", "thought_leadership"]
 BlogPostVersionSource = Literal["manual_save", "autosave", "ai:blog_writer", "ai:revise", "status_change"]
+# Blog post template keys live in the `blog_templates` DB table — no Literal needed.
 
 # ── Derived lists (used by /meta/enums and DB migrations) ───────────────────
 SERVICE_AREAS: list[str] = list(get_args(ServiceArea))
@@ -48,4 +47,3 @@ PRODUCT_TYPES: list[str] = list(get_args(ProductType))
 PARTNER_STATUSES: list[str] = list(get_args(PartnerStatus))
 CUSTOMER_STATUSES: list[str] = list(get_args(CustomerStatus))
 BLOG_POST_STATUSES: list[str] = list(get_args(BlogPostStatus))
-BLOG_POST_TEMPLATE_KEYS: list[str] = list(get_args(BlogPostTemplateKey))

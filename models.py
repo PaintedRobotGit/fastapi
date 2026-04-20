@@ -53,6 +53,26 @@ class Industry(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
+class BlogTemplate(Base):
+    __tablename__ = "blog_templates"
+
+    key: Mapped[str] = mapped_column(Text, primary_key=True)
+    surface: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'blog'"))
+    label: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    icon: Mapped[str] = mapped_column(Text, nullable=False)
+    scaffold_markdown: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
+    structure_prompt: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
+    suggested_word_count_min: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("200"))
+    suggested_word_count_max: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1500"))
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=true())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
 class Partner(Base):
     __tablename__ = "partners"
 
