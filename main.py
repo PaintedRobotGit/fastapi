@@ -16,6 +16,7 @@ from routers import (
     agents,
     ai_token_usage,
     auth,
+    blog_posts,
     chat,
     customer_profile,
     customers,
@@ -29,6 +30,7 @@ from routers import (
     roles,
     users,
 )
+from workers import scheduled_publish_worker
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -53,9 +55,15 @@ async def lifespan(app: FastAPI):
     # StreamableHTTPSessionManager never starts and every /mcp request 500s with
     # "Task group is not initialized".
     async with mcp_app.lifespan(app):
+        worker_task = asyncio.create_task(scheduled_publish_worker())
         try:
             yield
         finally:
+            worker_task.cancel()
+            try:
+                await worker_task
+            except asyncio.CancelledError:
+                pass
             await engine.dispose()
 
 
@@ -135,6 +143,7 @@ app.openapi = custom_openapi
 app.include_router(agents.router)
 app.include_router(auth.router)
 app.include_router(meta.router)
+app.include_router(blog_posts.router)
 app.include_router(onboarding.router)
 app.include_router(plans.router)
 app.include_router(industries.router)

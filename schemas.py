@@ -8,6 +8,7 @@ import re
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from constants import (
+    BlogPostStatus,
     BuyerStage,
     ContentFormat,
     CustomerStatus,
@@ -786,6 +787,124 @@ class ChatSessionShareRead(BaseModel):
     shared_with_user_id: int
     shared_by_user_id: int | None
     created_at: datetime
+
+
+# --- Blog Posts ---
+
+
+class BlogPostCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    slug: str | None = Field(None, max_length=80)
+    template_key: str | None = None
+    topic: str | None = None
+    target_audience_id: int | None = None
+    body_markdown: str = ""
+    body_json: dict | None = None
+    body_html: str | None = None
+    focus_keyword: str | None = None
+    meta_description: str | None = None
+    generated_by_agent_key: str | None = None
+
+
+class BlogPostUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = Field(None, min_length=1, max_length=300)
+    slug: str | None = Field(None, max_length=80)
+    excerpt: str | None = Field(None, max_length=280)
+    body_markdown: str | None = None
+    body_json: dict | None = None
+    body_html: str | None = None
+    word_count: int | None = Field(None, ge=0)
+    reading_time_sec: int | None = Field(None, ge=0)
+    meta_description: str | None = Field(None, max_length=320)
+    focus_keyword: str | None = None
+    og_title: str | None = None
+    og_image_url: str | None = None
+    canonical_url: str | None = None
+    meta_robots: str | None = None
+    featured_image_url: str | None = None
+    topic: str | None = None
+    target_audience_id: int | None = None
+    reviewer_user_id: int | None = None
+
+
+class BlogPostSummaryRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    partner_id: int
+    customer_id: int
+    title: str
+    slug: str
+    excerpt: str | None
+    status: BlogPostStatus
+    reviewer_user_id: int | None
+    review_requested_at: datetime | None
+    scheduled_for: datetime | None
+    published_at: datetime | None
+    published_by_user_id: int | None
+    archived_at: datetime | None
+    word_count: int
+    reading_time_sec: int
+    meta_description: str | None
+    focus_keyword: str | None
+    og_title: str | None
+    og_image_url: str | None
+    canonical_url: str | None
+    meta_robots: str
+    featured_image_url: str | None
+    template_key: str | None
+    generated_by_agent_key: str | None
+    topic: str | None
+    target_audience_id: int | None
+    created_by_user_id: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class BlogPostRead(BlogPostSummaryRead):
+    body_markdown: str
+    body_json: dict | None
+    body_html: str | None
+    review_notes: str | None
+
+
+class BlogPostListResponse(BaseModel):
+    items: list[BlogPostSummaryRead]
+    total: int
+
+
+class BlogPostVersionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    post_id: int
+    body_markdown: str
+    body_json: dict | None
+    word_count: int
+    created_at: datetime
+    created_by_user_id: int | None
+    source: str
+    note: str | None
+
+
+class BlogPostVersionListResponse(BaseModel):
+    items: list[BlogPostVersionRead]
+    total: int
+
+
+class BlogPostSubmitReviewInput(BaseModel):
+    reviewer_user_id: int | None = None
+    review_notes: str | None = None
+
+
+class BlogPostRejectReviewInput(BaseModel):
+    review_notes: str | None = None
+
+
+class BlogPostScheduleInput(BaseModel):
+    scheduled_for: datetime
 
 
 # --- AI token usage & partner balance ---

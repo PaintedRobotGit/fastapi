@@ -474,6 +474,70 @@ class CustomerContact(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
 
+class BlogPost(Base):
+    __tablename__ = "blog_posts"
+
+    __table_args__ = (
+        UniqueConstraint("customer_id", "slug", name="blog_posts_slug_unique_per_customer"),
+        Index("ix_blog_posts_partner_customer_status_updated", "partner_id", "customer_id", "status", "updated_at"),
+        Index("ix_blog_posts_scheduled_for", "scheduled_for", postgresql_where=text("status = 'scheduled'")),
+        Index("ix_blog_posts_published_at", "customer_id", "published_at", postgresql_where=text("status = 'published'")),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    partner_id: Mapped[int] = mapped_column(Integer, ForeignKey("partners.id", ondelete="CASCADE"), nullable=False)
+    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    created_by_user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    slug: Mapped[str] = mapped_column(Text, nullable=False)
+    excerpt: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'draft'"))
+    reviewer_user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    review_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    review_notes: Mapped[str | None] = mapped_column(Text)
+    scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    published_by_user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    body_markdown: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
+    body_json: Mapped[dict | None] = mapped_column(JSONB)
+    body_html: Mapped[str | None] = mapped_column(Text)
+    word_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    reading_time_sec: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    meta_description: Mapped[str | None] = mapped_column(Text)
+    focus_keyword: Mapped[str | None] = mapped_column(Text)
+    og_title: Mapped[str | None] = mapped_column(Text)
+    og_image_url: Mapped[str | None] = mapped_column(Text)
+    canonical_url: Mapped[str | None] = mapped_column(Text)
+    meta_robots: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'index,follow'"))
+    featured_image_url: Mapped[str | None] = mapped_column(Text)
+    template_key: Mapped[str | None] = mapped_column(Text)
+    generated_by_agent_key: Mapped[str | None] = mapped_column(Text)
+    topic: Mapped[str | None] = mapped_column(Text)
+    target_audience_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("target_audiences.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+
+class BlogPostVersion(Base):
+    __tablename__ = "blog_post_versions"
+
+    __table_args__ = (
+        Index("ix_blog_post_versions_post_created", "post_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    post_id: Mapped[int] = mapped_column(Integer, ForeignKey("blog_posts.id", ondelete="CASCADE"), nullable=False)
+    partner_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    body_markdown: Mapped[str] = mapped_column(Text, nullable=False)
+    body_json: Mapped[dict | None] = mapped_column(JSONB)
+    word_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    created_by_user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    source: Mapped[str] = mapped_column(Text, nullable=False)
+    note: Mapped[str | None] = mapped_column(Text)
+
+
 class PartnerTokenBalance(Base):
     __tablename__ = "partner_token_balance"
 

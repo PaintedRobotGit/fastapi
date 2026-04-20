@@ -4,8 +4,8 @@ Marketing management SaaS. Partners are agencies that purchase the platform; Cus
 
 **Database:** PostgreSQL (Railway)  
 **Extensions:** `citext`, `pgcrypto`, `pg_trgm`  
-**Triggers:** `set_updated_at()` fires `BEFORE UPDATE` on `partners`, `customers`, `users`, `plans`  
-**Row Level Security:** Enabled on all tenant tables. The original 8 core tables (`partners`, `customers`, `users`, `ai_token_usage`, `partner_token_balance`, `chat_sessions`, `chat_messages`, `chat_session_shares`) use `FORCE`. The 9 customer-profile tables (`customer_services`, `customer_service_channels`, `customer_documents`, `brand_voice`, `brand_voice_inputs`, `target_audiences`, `info_base_entries`, `products_and_services`, `customer_contacts`) have RLS enabled without `FORCE`. Policies use four session variables: `app.bypass_rls`, `app.current_partner_id`, `app.current_customer_id`, `app.current_user_id`. Application connects as `app_user` (non-superuser) so RLS fires. Admin sets `bypass_rls = 'true'`; partner users set partner/user IDs only; customer users set all four.  
+**Triggers:** `set_updated_at()` fires `BEFORE UPDATE` on `partners`, `customers`, `users`, `plans`, `blog_posts`, `brand_voice`, `customer_contacts`, `customer_documents`, `customer_services`, `info_base_entries`, `products_and_services`, `target_audiences`, `chat_sessions`  
+**Row Level Security:** Enabled on all tenant tables. Core tables (`partners`, `customers`, `users`, `ai_token_usage`, `partner_token_balance`, `chat_sessions`, `chat_messages`, `chat_session_shares`) use `FORCE`. The customer-profile tables (`customer_services`, `customer_service_channels`, `customer_documents`, `brand_voice`, `brand_voice_inputs`, `target_audiences`, `info_base_entries`, `products_and_services`, `customer_contacts`) have RLS enabled without `FORCE`. `blog_posts` and `blog_post_versions` do not yet have RLS enabled. Policies use four session variables: `app.bypass_rls`, `app.current_partner_id`, `app.current_customer_id`, `app.current_user_id`. Application connects as `app_user` (non-superuser) so RLS fires. Admin sets `bypass_rls = 'true'`; partner users set partner/user IDs only; customer users set all four.  
 **Application DB role:** `app_user` — used by FastAPI for all queries. `postgres` used for migrations/admin only.
 
 ---
@@ -348,6 +348,79 @@ Grants specific partner-account users read access to a session they don't own.
 
 ---
 
+### `blog_posts`
+Blog posts created for a customer. Supports a full editorial workflow from draft through to published. Body content is stored as markdown, optional rich-text JSON (e.g. TipTap/ProseMirror), and rendered HTML.
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| `id` | `serial` | NO | auto-increment | PK |
+| `partner_id` | `integer` | NO | | FK → `partners.id` ON DELETE CASCADE |
+| `customer_id` | `integer` | NO | | FK → `customers.id` ON DELETE CASCADE |
+| `created_by_user_id` | `integer` | NO | | FK → `users.id` ON DELETE NO ACTION |
+| `title` | `text` | NO | | Post title |
+| `slug` | `text` | NO | | URL-friendly identifier; unique per customer |
+| `excerpt` | `text` | YES | | Short summary / meta preview |
+| `status` | `text` | NO | `'draft'` | `draft`, `review`, `scheduled`, `published`, `archived` |
+| `reviewer_user_id` | `integer` | YES | | FK → `users.id` ON DELETE NO ACTION — assigned reviewer |
+| `review_requested_at` | `timestamptz` | YES | | When review was requested |
+| `review_notes` | `text` | YES | | Reviewer feedback |
+| `scheduled_for` | `timestamptz` | YES | | Publish time when status = `scheduled` |
+| `published_at` | `timestamptz` | YES | | Timestamp when post was published |
+| `published_by_user_id` | `integer` | YES | | FK → `users.id` ON DELETE NO ACTION |
+| `archived_at` | `timestamptz` | YES | | Soft delete timestamp |
+| `body_markdown` | `text` | NO | `''` | Canonical markdown body |
+| `body_json` | `jsonb` | YES | | Rich-text editor AST (e.g. TipTap) |
+| `body_html` | `text` | YES | | Rendered HTML for display |
+| `word_count` | `integer` | NO | `0` | Computed word count |
+| `reading_time_sec` | `integer` | NO | `0` | Estimated reading time in seconds |
+| `meta_description` | `text` | YES | | SEO meta description |
+| `focus_keyword` | `text` | YES | | Primary SEO keyword |
+| `og_title` | `text` | YES | | Open Graph title override |
+| `og_image_url` | `text` | YES | | Open Graph image URL |
+| `canonical_url` | `text` | YES | | Canonical URL override |
+| `meta_robots` | `text` | NO | `'index,follow'` | Robots meta directive |
+| `featured_image_url` | `text` | YES | | Hero/featured image URL |
+| `template_key` | `text` | YES | | Layout template identifier |
+| `generated_by_agent_key` | `text` | YES | | Agent key that generated this post (informational) |
+| `topic` | `text` | YES | | High-level topic or category label |
+| `target_audience_id` | `integer` | YES | | FK → `target_audiences.id` ON DELETE SET NULL |
+| `created_at` | `timestamptz` | NO | `now()` | |
+| `updated_at` | `timestamptz` | NO | `now()` | |
+
+**Constraints:** `blog_posts_status_check` — status IN (draft, review, scheduled, published, archived)  
+**Unique indexes:** `blog_posts_slug_unique_per_customer` — `(customer_id, slug)`  
+**Indexes:**
+- `ix_blog_posts_partner_customer_status_updated` on `(partner_id, customer_id, status, updated_at DESC)`
+- `ix_blog_posts_published_at` on `(customer_id, published_at DESC)` WHERE `status = 'published'`
+- `ix_blog_posts_scheduled_for` on `scheduled_for` WHERE `status = 'scheduled'`
+
+**RLS:** Not yet enabled on this table.
+
+---
+
+### `blog_post_versions`
+Immutable version history for blog posts. A new row is appended whenever the post body is saved (manually, via autosave, via AI generation, or on a status transition).
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| `id` | `serial` | NO | auto-increment | PK |
+| `post_id` | `integer` | NO | | FK → `blog_posts.id` ON DELETE CASCADE |
+| `partner_id` | `integer` | NO | | Denormalized partner scope (no FK constraint) |
+| `body_markdown` | `text` | NO | | Full markdown body snapshot |
+| `body_json` | `jsonb` | YES | | Rich-text AST snapshot |
+| `word_count` | `integer` | NO | `0` | Word count at time of save |
+| `source` | `text` | NO | | How the version was created: `manual_save`, `autosave`, `ai:blog_writer`, `ai:revise`, `status_change` |
+| `note` | `text` | YES | | Optional human note describing the version |
+| `created_by_user_id` | `integer` | YES | | FK → `users.id` ON DELETE NO ACTION |
+| `created_at` | `timestamptz` | NO | `now()` | |
+
+**Constraints:** `blog_post_versions_source_check` — source IN (manual_save, autosave, ai:blog_writer, ai:revise, status_change)  
+**Indexes:** `ix_blog_post_versions_post_created` on `(post_id, created_at DESC)`
+
+**RLS:** Not yet enabled on this table.
+
+---
+
 ### `customer_services`
 One-row-per-customer record storing agency service scope and high-level notes for each marketing channel delivered to a customer. At most one row per customer (unique on `customer_id`).
 
@@ -600,6 +673,7 @@ partners
   └── ai_token_usage              (partner_id → partners.id)
   └── partner_token_balance       (partner_id → partners.id)
   └── app_agents                  (partner_id → partners.id)
+  └── blog_posts                  (partner_id → partners.id)
   └── customer_services           (partner_id → partners.id)
   └── customer_service_channels   (partner_id → partners.id)
   └── customer_documents          (partner_id → partners.id)
@@ -613,6 +687,7 @@ partners
 customers
   └── users                       (customer_id → customers.id)
   └── ai_token_usage              (customer_id → customers.id)
+  └── blog_posts                  (customer_id → customers.id)
   └── customer_services           (customer_id → customers.id)
   └── customer_service_channels   (customer_id → customers.id)
   └── customer_documents          (customer_id → customers.id)
@@ -629,6 +704,10 @@ roles
 
 users
   └── ai_token_usage              (user_id → users.id)
+  └── blog_posts                  (created_by_user_id → users.id)
+  └── blog_posts                  (reviewer_user_id → users.id)
+  └── blog_posts                  (published_by_user_id → users.id)
+  └── blog_post_versions          (created_by_user_id → users.id)
   └── customer_documents          (created_by_user_id → users.id)
 
 permissions
@@ -644,4 +723,10 @@ users
 chat_sessions
   └── chat_messages               (session_id → chat_sessions.id)
   └── chat_session_shares         (session_id → chat_sessions.id)
+
+target_audiences
+  └── blog_posts                  (target_audience_id → target_audiences.id)
+
+blog_posts
+  └── blog_post_versions          (post_id → blog_posts.id)
 ```

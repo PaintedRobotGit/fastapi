@@ -1,6 +1,8 @@
 from fastapi import APIRouter
 
 from constants import (
+    BLOG_POST_STATUSES,
+    BLOG_POST_TEMPLATE_KEYS,
     BUYER_STAGES,
     CONTENT_FORMATS,
     CUSTOMER_STATUSES,
@@ -28,4 +30,6 @@ async def get_enums() -> dict[str, list[str]]:
         "product_types": PRODUCT_TYPES,
         "partner_statuses": PARTNER_STATUSES,
         "customer_statuses": CUSTOMER_STATUSES,
+        "blog_post_statuses": BLOG_POST_STATUSES,
+        "blog_post_template_keys": BLOG_POST_TEMPLATE_KEYS,
     }
