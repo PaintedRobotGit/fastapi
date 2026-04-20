@@ -69,7 +69,7 @@ async def _check_customer_access(ctx, db, customer_id: int) -> Customer:
         "products/services, and key info base entries. Call this first before "
         "writing any blog post content."
     ),
-    tags={"agent:blog_writer"},
+    tags={"agent:blog_writer", "agent:customer_agent"},
 )
 async def get_customer_context(customer_id: int) -> dict:
     async with mcp_db_context() as (ctx, db):
@@ -169,7 +169,7 @@ async def get_customer_context(customer_id: int) -> dict:
 
 @mcp_tool(
     description="Get a blog post by ID including its current body content.",
-    tags={"agent:blog_writer"},
+    tags={"agent:blog_writer", "agent:customer_agent"},
 )
 async def get_blog_post(customer_id: int, post_id: int) -> dict:
     async with mcp_db_context() as (ctx, db):
@@ -205,6 +205,45 @@ async def get_blog_post(customer_id: int, post_id: int) -> dict:
             "meta_description": post.meta_description,
             "word_count": post.word_count,
         }
+
+
+@mcp_tool(
+    description=(
+        "List blog posts for a customer. Optionally filter by status "
+        "(draft, review, scheduled, published, archived). Returns post summaries."
+    ),
+    tags={"agent:customer_agent"},
+)
+async def list_blog_posts(
+    customer_id: int,
+    status: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    async with mcp_db_context() as (ctx, db):
+        await _check_customer_access(ctx, db, customer_id)
+        stmt = select(BlogPost).where(BlogPost.customer_id == customer_id)
+        if status:
+            stmt = stmt.where(BlogPost.status == status)
+        stmt = stmt.order_by(BlogPost.updated_at.desc()).limit(min(limit, 100))
+        posts = (await db.execute(stmt)).scalars().all()
+        return [
+            {
+                "id": p.id,
+                "title": p.title,
+                "slug": p.slug,
+                "status": p.status,
+                "topic": p.topic,
+                "template_key": p.template_key,
+                "word_count": p.word_count,
+                "focus_keyword": p.focus_keyword,
+                "target_audience_id": p.target_audience_id,
+                "published_at": p.published_at.isoformat() if p.published_at else None,
+                "scheduled_for": p.scheduled_for.isoformat() if p.scheduled_for else None,
+                "created_at": p.created_at.isoformat(),
+                "updated_at": p.updated_at.isoformat(),
+            }
+            for p in posts
+        ]
 
 
 @mcp_tool(

@@ -17,5 +17,6 @@ from mcp_server.tools.blog_posts import (  # noqa: F401
     create_blog_post,
     get_blog_post,
     get_customer_context,
+    list_blog_posts,
     update_blog_post,
 )
