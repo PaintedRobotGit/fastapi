@@ -13,3 +13,9 @@ TOOL_AGENTS manually — update the decorator instead.
 
 from mcp_server.tools.registry import TOOL_AGENTS, mcp_tool  # noqa: F401
 from mcp_server.tools.customers import get_customer, list_customers  # noqa: F401
+from mcp_server.tools.blog_posts import (  # noqa: F401
+    create_blog_post,
+    get_blog_post,
+    get_customer_context,
+    update_blog_post,
+)
