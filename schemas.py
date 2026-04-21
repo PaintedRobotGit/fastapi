@@ -713,6 +713,7 @@ class AppAgentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     key: str
+    console_agent_id: str
     label: str
     category: str
     description: str
