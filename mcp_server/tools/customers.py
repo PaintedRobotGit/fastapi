@@ -72,9 +72,22 @@ async def list_customers(q: str | None = None, limit: int = 50) -> list[dict]:
 @mcp_tool(description="Get a single customer by ID.", tags={"agent:general", "agent:customer_agent"})
 async def get_customer(customer_id: int) -> dict:
     async with mcp_db_context() as (ctx, db):
+        # Mirror the guard in blog_posts._check_customer_access: reject
+        # placeholder ids (0 / negatives) with a message that tells the
+        # LLM to go search instead of guessing.
+        if not isinstance(customer_id, int) or customer_id <= 0:
+            raise ValueError(
+                f"Invalid customer_id={customer_id!r}. Pass a real "
+                "positive integer id. Do NOT guess, do NOT pass 0 as "
+                "a placeholder. Call `list_customers` with a keyword "
+                "`q` to find the correct id, then retry."
+            )
         customer = await db.get(Customer, customer_id)
         if customer is None:
-            raise ValueError(f"Customer {customer_id} not found")
+            raise ValueError(
+                f"Customer {customer_id} not found. Use `list_customers` "
+                "with a keyword search if you don't already have the id."
+            )
 
         if not ctx.is_admin:
             ep = await effective_partner_id(db, ctx.user)

@@ -47,9 +47,25 @@ async def _alloc_slug(db, customer_id: int, base_slug: str) -> str:
 
 
 async def _check_customer_access(ctx, db, customer_id: int) -> Customer:
+    # Guard against the LLM passing a placeholder/sentinel id (0, -1, etc.)
+    # when it doesn't actually know the real customer. We raise a *typed*
+    # ValueError with instructions the model can act on — it tells it to
+    # go search instead of guessing again.
+    if not isinstance(customer_id, int) or customer_id <= 0:
+        raise ValueError(
+            f"Invalid customer_id={customer_id!r}. You must pass a real "
+            "positive integer id. Do NOT guess, do NOT pass 0 as a "
+            "placeholder, and do NOT ask the user for it. Call "
+            "`list_customers` with a keyword `q` (e.g. q='blue horizon') "
+            "to find the correct id, then retry this call."
+        )
     customer = await db.get(Customer, customer_id)
     if customer is None:
-        raise ValueError(f"Customer {customer_id} not found")
+        raise ValueError(
+            f"Customer {customer_id} not found. If you weren't given "
+            "this id directly, resolve the customer first by calling "
+            "`list_customers` with a keyword search."
+        )
     if not ctx.is_admin:
         ep = await effective_partner_id(db, ctx.user)
         if ctx.tier == "partner":
@@ -173,10 +189,23 @@ async def get_customer_context(customer_id: int) -> dict:
 )
 async def get_blog_post(customer_id: int, post_id: int) -> dict:
     async with mcp_db_context() as (ctx, db):
+        # Reject placeholder post_ids before we hit the DB. Same rationale
+        # as _check_customer_access — give the LLM a pointer to the right
+        # search tool instead of a generic "not found".
+        if not isinstance(post_id, int) or post_id <= 0:
+            raise ValueError(
+                f"Invalid post_id={post_id!r}. Pass a real positive integer id. "
+                "Do NOT guess. Call `list_blog_posts` with `q` (keyword) "
+                "to find the right post id, then retry this call."
+            )
         await _check_customer_access(ctx, db, customer_id)
         post = await db.get(BlogPost, post_id)
         if post is None or post.customer_id != customer_id:
-            raise ValueError(f"Blog post {post_id} not found")
+            raise ValueError(
+                f"Blog post {post_id} not found for customer {customer_id}. "
+                "Use `list_blog_posts` with a keyword search to find the "
+                "correct post id."
+            )
         template_data = None
         if post.template_key:
             tmpl = await db.get(BlogTemplate, post.template_key)
