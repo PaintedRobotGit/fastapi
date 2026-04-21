@@ -4,7 +4,7 @@ import re
 import unicodedata
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from access import effective_partner_id
 from models import (
@@ -210,13 +210,17 @@ async def get_blog_post(customer_id: int, post_id: int) -> dict:
 @mcp_tool(
     description=(
         "List blog posts for a customer. Optionally filter by status "
-        "(draft, review, scheduled, published, archived). Returns post summaries."
+        "(draft, review, scheduled, published, archived) or by a "
+        "case-insensitive keyword search (q) across title, excerpt, and "
+        "focus keyword. Use q to find posts by topic (e.g. q='tie' "
+        "resolves 'How to tie a tie'). Returns post summaries."
     ),
     tags={"agent:customer_agent"},
 )
 async def list_blog_posts(
     customer_id: int,
     status: str | None = None,
+    q: str | None = None,
     limit: int = 20,
 ) -> list[dict]:
     async with mcp_db_context() as (ctx, db):
@@ -224,6 +228,17 @@ async def list_blog_posts(
         stmt = select(BlogPost).where(BlogPost.customer_id == customer_id)
         if status:
             stmt = stmt.where(BlogPost.status == status)
+        # Keyword search. Mirror the REST endpoint's column set
+        # (title / excerpt / focus_keyword) so agents and UI behave
+        # consistently. Blank `q` is a no-op so callers can always
+        # pass the param.
+        if q and q.strip():
+            needle = f"%{q.strip()}%"
+            stmt = stmt.where(or_(
+                BlogPost.title.ilike(needle),
+                BlogPost.excerpt.ilike(needle),
+                BlogPost.focus_keyword.ilike(needle),
+            ))
         stmt = stmt.order_by(BlogPost.updated_at.desc()).limit(min(limit, 100))
         posts = (await db.execute(stmt)).scalars().all()
         return [

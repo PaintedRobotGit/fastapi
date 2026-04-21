@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from access import effective_partner_id
 from models import Customer
@@ -6,8 +6,17 @@ from mcp_server.context import mcp_db_context
 from mcp_server.tools.registry import mcp_tool
 
 
-@mcp_tool(description="List all customers visible to the authenticated user.", tags={"agent:general", "agent:customer_agent"})
-async def list_customers() -> list[dict]:
+@mcp_tool(
+    description=(
+        "List customers visible to the authenticated user. Pass `q` to "
+        "do a case-insensitive keyword search across name, slug, and "
+        "website URL (e.g. q='blue horizon' resolves to 'Blue Horizon "
+        "Spa'). Use this to look up a customer by name instead of asking "
+        "the user for a numeric id."
+    ),
+    tags={"agent:general", "agent:customer_agent"},
+)
+async def list_customers(q: str | None = None, limit: int = 50) -> list[dict]:
     async with mcp_db_context() as (ctx, db):
         stmt = select(Customer).order_by(Customer.name)
 
@@ -25,6 +34,23 @@ async def list_customers() -> list[dict]:
             stmt = stmt.where(Customer.id == ctx.user.customer_id)
 
         stmt = stmt.where(Customer.archived_at.is_(None))
+
+        # Keyword search. Blank / whitespace-only `q` is treated as "no
+        # filter" — keeps the tool forgiving when the caller passes an
+        # empty string. `ilike` against nullable columns (slug can be
+        # null in theory, website_url often is) returns false for null,
+        # which is the right behaviour.
+        if q and q.strip():
+            needle = f"%{q.strip()}%"
+            stmt = stmt.where(
+                or_(
+                    Customer.name.ilike(needle),
+                    Customer.slug.ilike(needle),
+                    Customer.website_url.ilike(needle),
+                )
+            )
+
+        stmt = stmt.limit(min(max(limit, 1), 200))
         rows = (await db.execute(stmt)).scalars().all()
         return [
             {

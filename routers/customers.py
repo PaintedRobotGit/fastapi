@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +25,13 @@ async def list_customers(
     limit: int = Query(100, ge=1, le=500),
     partner_id: int | None = Query(None, description="Admin only: filter by partner id"),
     status: str | None = Query(None, description="Filter by customer status"),
+    q: str | None = Query(
+        None,
+        description=(
+            "Case-insensitive keyword search across name, slug, and "
+            "website URL. Blank/whitespace is treated as no filter."
+        ),
+    ),
     omit_archived: bool = Query(
         True,
         description="Exclude customers with archived_at set (not applied when listing only your own row).",
@@ -45,6 +52,15 @@ async def list_customers(
         stmt = stmt.where(Customer.id == ctx.user.customer_id)
     if status is not None:
         stmt = stmt.where(Customer.status == status)
+    if q and q.strip():
+        needle = f"%{q.strip()}%"
+        stmt = stmt.where(
+            or_(
+                Customer.name.ilike(needle),
+                Customer.slug.ilike(needle),
+                Customer.website_url.ilike(needle),
+            )
+        )
     if omit_archived and ctx.tier != "customer":
         stmt = stmt.where(Customer.archived_at.is_(None))
     stmt = stmt.offset(skip).limit(limit)
